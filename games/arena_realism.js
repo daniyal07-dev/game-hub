@@ -2,8 +2,13 @@ import * as THREE from 'three';
 
 /* ===== ARENA REALISM ADD-ON (separate file) =====
    REALISTIC = false  -> the old neon look comes back
-   Press B in the game to turn bloom on/off */
+   Press B in the game to turn bloom on/off (PC only) */
 const REALISTIC = true;
+
+/* Phones: bloom is OFF by default (saves speed and memory).
+   Set BLOOM_ON_PHONE = true if you ever want it back on phones. */
+const BLOOM_ON_PHONE = false;
+const IS_PHONE = window.matchMedia('(pointer: coarse)').matches || /[?&]touch=1/.test(location.search);
 
 const TEX_DIR = '../textures/';
 const HDR_URL = '../textures/sky.hdr';
@@ -138,7 +143,8 @@ function takeOver(renderer) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMappingExposure = 1.0;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // PC: pixel ratio up to 1.5. Phones keep the value chosen by the game's Graphics Quality.
+    if (!IS_PHONE) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
     scene.background = new THREE.Color(FOG_COLOR);
     scene.fog = new THREE.Fog(FOG_COLOR, 70, 240);
@@ -261,7 +267,10 @@ function takeOver(renderer) {
       });
 
     loadHDRI(scene, sky);
-    initBloom(scene, camera);
+
+    // bloom: PC yes, phones no (unless BLOOM_ON_PHONE is true)
+    if (!IS_PHONE || BLOOM_ON_PHONE) initBloom(scene, camera);
+    else console.log('ℹ Bloom is off on phones');
   }
 
   /* ---------- optional HDRI sky ---------- */
