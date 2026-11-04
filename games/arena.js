@@ -1822,10 +1822,6 @@ function setupTouchControls() {
    ===================================================== */
 let bobTime = 0;
 
-// ---- phone speed (phones only, PC is not affected) ----
-const TOUCH_WALK_MULT = 0.65;     // phone walking speed (1 = same as PC)
-const TOUCH_SPRINT_MULT = 0.7;    // phone sprint speed (1 = same as PC)
-
 function updatePlayer(dt) {
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
@@ -1848,9 +1844,7 @@ function updatePlayer(dt) {
   const len = Math.hypot(mx, mz);
   const moving = len > 0;
   if (moving) {
-    const sprinting = keys['ShiftLeft'] || keys['ShiftRight'] || joy.sprint;
-    let speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
-    if (touchMode) speed *= sprinting ? TOUCH_SPRINT_MULT : TOUCH_WALK_MULT;   // slower on phones
+    let speed = (keys['ShiftLeft'] || keys['ShiftRight'] || joy.sprint) ? SPRINT_SPEED : WALK_SPEED;
     speed *= analog;
     speed *= 1 - (1 - SCOPE_MOVE) * scopeAmt;          // slower while scoped
     camera.position.x += (mx / len) * speed * dt;
