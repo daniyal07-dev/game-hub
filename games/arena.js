@@ -16,6 +16,15 @@ const DRONE_HP = 3;
 const ENEMY_DMG = 10;
 const BASE_SENS = 0.0022;
 
+/* ---------- PHONE / TOUCH CONTROLS ---------- */
+// Touch mode turns on automatically on phones/tablets.
+// To test on a laptop, open arena.html?touch=1  (or use Chrome's phone view and refresh)
+const touchMode = window.matchMedia('(pointer: coarse)').matches || /[?&]touch=1/.test(location.search);
+const TOUCH_LOOK = 0.0045;        // look speed: radians per finger pixel (bigger = faster turning)
+const JOY_R = 56;                 // joystick radius in pixels (how far the thumb can push)
+const JOY_DEAD = 0.12;            // ignore tiny thumb movements (0 to 1)
+const JOY_SPRINT = 0.9;           // push the joystick this far (0 to 1) to sprint
+
 /* ---------- WAR MODE FEATURES (scope, aim assist, keys, quality) ---------- */
 const FOV_NORMAL = 75;            // normal field of view
 const FOV_SCOPE = 30;             // zoomed-in field of view
@@ -111,7 +120,12 @@ let fireQueueTime = 0;
 
 let rightHeld = false;           // right mouse button (scope)
 let scopeAmt = 0;                // 0 = normal view, 1 = fully zoomed (smoothed)
-let aimAssist = false;           // aim assist is OFF by default
+let aimAssist = touchMode;       // OFF on PC by default, ON by default on phones (thumb aiming is hard)
+
+// phone touch state
+let touchPaused = false;         // true while the pause menu is open on a phone
+let touchScope = false;          // scope button toggled on
+const joy = { x: 0, y: 0, mag: 0, sprint: false };   // joystick: x/y from -1 to 1 (y up = negative)
 
 const drones = [];
 const enemyBullets = [];
@@ -122,8 +136,9 @@ function setState(s) {
   gameState = s;
   document.body.classList.toggle('in-game', s === 'running');
 }
-function isPlaying() { return gameState === 'running' && pointerLocked; }
-function isPaused() { return gameState === 'running' && !pointerLocked; }
+// On a phone there is no pointer lock, so "playing" = running and not paused by the menu
+function isPlaying() { return gameState === 'running' && (touchMode ? !touchPaused : pointerLocked); }
+function isPaused() { return gameState === 'running' && !isPlaying(); }
 
 /* =====================================================
    3. SCENE, CAMERA, RENDERER
@@ -146,9 +161,11 @@ container.appendChild(renderer.domElement);
 const canvas = renderer.domElement;
 
 // graphics quality preset (High / Medium / Low) = sharpness of the picture
+// phones start on Low (smooth) the first time; the player can change it in Settings
 let quality = (() => {
   const q = localStorage.getItem('arena_quality');
-  return QUALITY[q] !== undefined ? q : 'High';
+  if (QUALITY[q] !== undefined) return q;
+  return touchMode ? 'Low' : 'High';
 })();
 function applyQuality() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality]));
@@ -605,6 +622,8 @@ async function loadModels() {
   }
 }
 
+/* ===== END OF PART 1 — paste PART 2 directly below this line ===== */
+
 /* =====================================================
    7. AUDIO: sound effects (real gunshot + code-generated)
    ===================================================== */
@@ -947,8 +966,6 @@ function flashDamage() {
   f.style.transition = 'opacity 0.45s';
   f.style.opacity = '0';
 }
-
-/* ===== END OF PART 1 — paste PART 2 directly below this line ===== */
 
 /* =====================================================
    10. PARTICLES + TRACERS
@@ -1294,13 +1311,19 @@ function updateEnemyBullets(dt) {
    ===================================================== */
 const TIPS = [
   'Each drone takes 3 hits to destroy. Watch its color change: cyan → purple → pink!',
-  'Drones shoot back! Keep moving, and sprint with Shift to dodge their bullets.',
+  touchMode
+    ? 'Drones shoot back! Keep moving, and push the joystick all the way to sprint.'
+    : 'Drones shoot back! Keep moving, and sprint with Shift to dodge their bullets.',
   'Squads fly in from the front. Hide behind pillars: they block bullets.',
   'Clearing a wave restores +25 health. Stay alive!',
-  'Watch your ammo! Press R to reload before the next squad arrives.',
+  touchMode
+    ? 'Watch your ammo! Tap R to reload before the next squad arrives.'
+    : 'Watch your ammo! Press R to reload before the next squad arrives.',
   'A drone glows brighter right before it fires. Dodge!',
   'Drones get faster and shoot quicker every wave.',
-  'Hold the right mouse button (or F) to zoom in. Press V to turn aim assist on or off.'
+  touchMode
+    ? 'Tap ◎ to zoom in. Aim assist is ON to help your thumb aim.'
+    : 'Hold the right mouse button (or F) to zoom in. Press V to turn aim assist on or off.'
 ];
 
 function planSquads(total, n) {
@@ -1413,6 +1436,8 @@ function updateWaves(dt) {
   }
 }
 
+/* ===== END OF PART 2 — paste PART 3 directly below this line ===== */
+
 /* =====================================================
    13. SHOOTING
    ===================================================== */
@@ -1515,7 +1540,7 @@ function updateKeyLook(dt) {
   if (changed) applyLook();
 }
 
-// Scope: hold right mouse button or F. Smooth zoom + dark edges.
+// Scope: hold right mouse button or F (phone: tap the ◎ button). Smooth zoom + dark edges.
 const scopeOverlay = document.createElement('div');
 scopeOverlay.style.cssText =
   'position:fixed;inset:0;pointer-events:none;z-index:4;opacity:0;' +
@@ -1523,7 +1548,7 @@ scopeOverlay.style.cssText =
 document.body.appendChild(scopeOverlay);
 
 function updateScope(dt) {
-  const want = isPlaying() && (rightHeld || keys[SCOPE_KEY]);
+  const want = isPlaying() && (rightHeld || keys[SCOPE_KEY] || touchScope);
   scopeAmt += ((want ? 1 : 0) - scopeAmt) * Math.min(1, dt * 12);
   if (!want && scopeAmt < 0.005) scopeAmt = 0;
   const fov = FOV_NORMAL + (FOV_SCOPE - FOV_NORMAL) * scopeAmt;
@@ -1535,16 +1560,18 @@ function updateScope(dt) {
   gun.visible = scopeAmt < 0.5;
 }
 
-// Aim assist label (bottom of the screen, only while playing)
+// Aim assist label (bottom of the screen, PC only; on phones it is a Settings button)
 const aimLabel = document.createElement('div');
 aimLabel.style.cssText =
   'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:6;pointer-events:none;' +
   'font:700 12px "Segoe UI",Arial,sans-serif;letter-spacing:2px;padding:4px 12px;border-radius:12px;' +
   'background:rgba(0,0,0,0.45);display:none;';
 document.body.appendChild(aimLabel);
+let aimBtn = null;                 // the Aim Assist button in Settings (phones only)
 function refreshAimLabel() {
   aimLabel.textContent = 'AIM ASSIST: ' + (aimAssist ? 'ON' : 'OFF') + '  (V)';
   aimLabel.style.color = aimAssist ? '#00f0ff' : '#9aa0c0';
+  if (aimBtn) aimBtn.textContent = aimAssist ? 'ON' : 'OFF';
 }
 refreshAimLabel();
 
@@ -1594,9 +1621,210 @@ function applyAimAssist(dt) {
 }
 
 /* =====================================================
+   13c. TOUCH CONTROLS (phones): joystick, look, buttons
+   ===================================================== */
+let joyId = null;                  // finger that holds the joystick
+let lookId = null;                 // finger that is looking around
+let lookX = 0, lookY = 0;          // last position of the look finger
+const joyOrigin = { x: 0, y: 0 };  // where the joystick finger first touched
+
+// put the joystick graphic back to its resting place
+function joyVisualReset() {
+  const base = $('joy-base');
+  const knob = $('joy-knob');
+  if (base) {
+    base.style.left = '';
+    base.style.top = '';
+    base.style.bottom = '';
+    base.classList.remove('sprint');
+  }
+  if (knob) knob.style.transform = '';
+}
+
+// let go of everything (used when pausing, game over, new game)
+function resetTouchInput() {
+  joyId = null;
+  lookId = null;
+  joy.x = 0; joy.y = 0; joy.mag = 0; joy.sprint = false;
+  joyVisualReset();
+  mouseHeld = false;
+  fireQueued = false;
+  touchScope = false;
+  const sc = $('t-scope');
+  if (sc) sc.classList.remove('on', 'active');
+  const fr = $('t-fire');
+  if (fr) fr.classList.remove('active');
+}
+
+function pauseTouch() {
+  if (!touchMode || gameState !== 'running' || !isPlaying()) return;
+  touchPaused = true;
+  resetTouchInput();
+  showOverlay('pause-screen');
+  applyVolumes(false);
+}
+
+function goFullscreen() {
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+      Promise.resolve(req.call(el)).then(() => {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  } catch (e) { /* fullscreen not available: the game still works */ }
+}
+
+function setupTouchControls() {
+  const joyZone = $('joy-zone');
+  const lookZone = $('look-zone');
+  const base = $('joy-base');
+  const knob = $('joy-knob');
+  const opt = { passive: false };
+
+  function joyUpdate(cx, cy) {
+    let dx = cx - joyOrigin.x;
+    let dy = cy - joyOrigin.y;
+    const d = Math.hypot(dx, dy);
+    if (d > JOY_R) { dx = (dx / d) * JOY_R; dy = (dy / d) * JOY_R; }
+    const m = Math.min(1, d / JOY_R);
+    knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    if (m < JOY_DEAD) {
+      joy.x = 0; joy.y = 0; joy.mag = 0; joy.sprint = false;
+    } else {
+      joy.x = dx / JOY_R;
+      joy.y = dy / JOY_R;
+      joy.mag = m;
+      joy.sprint = m >= JOY_SPRINT;
+    }
+    base.classList.toggle('sprint', joy.sprint);
+  }
+
+  function joyRelease() {
+    joyId = null;
+    joy.x = 0; joy.y = 0; joy.mag = 0; joy.sprint = false;
+    joyVisualReset();
+  }
+
+  // ----- joystick (left side) -----
+  joyZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (joyId !== null || !isPlaying()) return;
+    const t = e.changedTouches[0];
+    joyId = t.identifier;
+    joyOrigin.x = t.clientX;
+    joyOrigin.y = t.clientY;
+    const w = base.offsetWidth, h = base.offsetHeight;
+    base.style.left = (t.clientX - w / 2) + 'px';        // the stick appears under the thumb
+    base.style.top = (t.clientY - h / 2) + 'px';
+    base.style.bottom = 'auto';
+    joyUpdate(t.clientX, t.clientY);
+  }, opt);
+
+  joyZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === joyId) joyUpdate(t.clientX, t.clientY);
+    }
+  }, opt);
+
+  const joyEnd = (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === joyId) joyRelease();
+    }
+  };
+  joyZone.addEventListener('touchend', joyEnd, opt);
+  joyZone.addEventListener('touchcancel', joyEnd, opt);
+
+  // ----- look (right side): drag to turn -----
+  lookZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (lookId !== null || !isPlaying()) return;
+    const t = e.changedTouches[0];
+    lookId = t.identifier;
+    lookX = t.clientX;
+    lookY = t.clientY;
+  }, opt);
+
+  lookZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!isPlaying()) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier !== lookId) continue;
+      const s = TOUCH_LOOK * (settings.sensLevel / 10) * (camera.fov / FOV_NORMAL);
+      yaw -= (t.clientX - lookX) * s;
+      pitch -= (t.clientY - lookY) * s;
+      lookX = t.clientX;
+      lookY = t.clientY;
+      applyLook();
+    }
+  }, opt);
+
+  const lookEnd = (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === lookId) lookId = null;
+    }
+  };
+  lookZone.addEventListener('touchend', lookEnd, opt);
+  lookZone.addEventListener('touchcancel', lookEnd, opt);
+
+  // ----- buttons -----
+  function bindButton(el, onDown, onUp) {
+    el.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      el.classList.add('active');
+      onDown();
+    }, opt);
+    const up = (e) => {
+      e.preventDefault();
+      el.classList.remove('active');
+      if (onUp) onUp();
+    };
+    el.addEventListener('touchend', up, opt);
+    el.addEventListener('touchcancel', up, opt);
+  }
+
+  bindButton($('t-fire'),
+    () => {
+      if (!isPlaying()) return;
+      mouseHeld = true;                       // hold = automatic fire
+      fireQueued = true;                      // a quick tap always fires one shot
+      fireQueueTime = performance.now();
+    },
+    () => { mouseHeld = false; }
+  );
+
+  bindButton($('t-reload'), () => startReload());
+
+  bindButton($('t-scope'), () => {
+    if (!isPlaying()) return;
+    touchScope = !touchScope;
+    $('t-scope').classList.toggle('on', touchScope);
+  });
+
+  bindButton($('t-pause'), () => pauseTouch());
+
+  // pause automatically when the phone is turned upright, the app is switched, or fullscreen ends
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseTouch(); });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) pauseTouch(); });
+  window.addEventListener('resize', () => { if (window.innerHeight > window.innerWidth) pauseTouch(); });
+}
+
+/* =====================================================
    14. PLAYER MOVEMENT
    ===================================================== */
 let bobTime = 0;
+
+// ---- phone speed (phones only, PC is not affected) ----
+const TOUCH_WALK_MULT = 0.65;     // phone walking speed (1 = same as PC)
+const TOUCH_SPRINT_MULT = 0.7;    // phone sprint speed (1 = same as PC)
 
 function updatePlayer(dt) {
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -1607,11 +1835,23 @@ function updatePlayer(dt) {
   if (keys['KeyS']) { mx -= fx; mz -= fz; }
   if (keys['KeyD']) { mx += rx; mz += rz; }
   if (keys['KeyA']) { mx -= rx; mz -= rz; }
+  const keyMove = mx !== 0 || mz !== 0;
+
+  // phone joystick (up = forward, right = strafe right)
+  let analog = 1;
+  if (touchMode && joy.mag > 0) {
+    mx += fx * -joy.y + rx * joy.x;
+    mz += fz * -joy.y + rz * joy.x;
+    if (!keyMove) analog = 0.5 + 0.5 * Math.min(1, joy.mag / JOY_SPRINT);   // gentle push = slower walk
+  }
 
   const len = Math.hypot(mx, mz);
   const moving = len > 0;
   if (moving) {
-    let speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? SPRINT_SPEED : WALK_SPEED;
+    const sprinting = keys['ShiftLeft'] || keys['ShiftRight'] || joy.sprint;
+    let speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+    if (touchMode) speed *= sprinting ? TOUCH_SPRINT_MULT : TOUCH_WALK_MULT;   // slower on phones
+    speed *= analog;
     speed *= 1 - (1 - SCOPE_MOVE) * scopeAmt;          // slower while scoped
     camera.position.x += (mx / len) * speed * dt;
     camera.position.z += (mz / len) * speed * dt;
@@ -1663,6 +1903,8 @@ function resetGame() {
   fireQueued = false;
   rightHeld = false;
   scopeAmt = 0;
+  touchPaused = false;
+  resetTouchInput();
   wave = 0;
   waveActive = false;
   squadsPlan = [];
@@ -1687,6 +1929,7 @@ function endGame() {
   $('squad-alert').classList.remove('show');
   mouseHeld = false;
   rightHeld = false;
+  resetTouchInput();
 
   const isRecord = score > best;
   if (isRecord) {
@@ -1709,6 +1952,7 @@ function quitToMenu() {
   setState('idle');
   hideBanner();
   rightHeld = false;
+  resetTouchInput();
   $('best-start').textContent = best;
   applyVolumes(false);
   showOverlay('start-screen');
@@ -1719,7 +1963,13 @@ function beginRun() {
   resetGame();
   setState('running');
   hideOverlays();
-  canvas.requestPointerLock();
+  if (touchMode) {
+    touchPaused = false;
+    goFullscreen();                  // needs this tap; also tries to lock landscape
+    applyVolumes(false);
+  } else {
+    canvas.requestPointerLock();
+  }
 }
 
 /* =====================================================
@@ -1737,7 +1987,12 @@ $('restart-btn').addEventListener('click', beginRun);
 $('resume-btn').addEventListener('click', () => {
   ensureAudio();
   hideOverlays();
-  canvas.requestPointerLock();
+  if (touchMode) {
+    touchPaused = false;             // phones: no pointer lock, just carry on
+    applyVolumes(false);
+  } else {
+    canvas.requestPointerLock();
+  }
 });
 
 $('quit-btn').addEventListener('click', quitToMenu);
@@ -1746,6 +2001,8 @@ $('menu-btn').addEventListener('click', quitToMenu);
 $('start-settings-btn').addEventListener('click', () => { settingsReturn = 'start-screen'; showOverlay('settings-screen'); });
 $('pause-settings-btn').addEventListener('click', () => { settingsReturn = 'pause-screen'; showOverlay('settings-screen'); });
 $('settings-back-btn').addEventListener('click', () => showOverlay(settingsReturn));
+
+$('fs-btn').addEventListener('click', goFullscreen);
 
 /* ---------- settings sliders ---------- */
 const sliders = [
@@ -1817,9 +2074,32 @@ const qualityBtn = document.createElement('button');
 })();
 function refreshQualityButton() { qualityBtn.textContent = quality; }
 
+/* ---------- Aim Assist row (phones only: there is no V key on a phone) ---------- */
+(function buildAimRow() {
+  if (!touchMode) return;
+  const qRow = qualityBtn.parentElement;
+  const row = document.createElement('div');
+  row.className = qRow.className;
+  const label = document.createElement('label');
+  const qLabel = qRow.querySelector('label');
+  if (qLabel) label.className = qLabel.className;
+  label.textContent = 'Aim Assist';
+  aimBtn = document.createElement('button');
+  aimBtn.type = 'button';
+  aimBtn.style.cssText = qualityBtn.style.cssText;
+  row.appendChild(label);
+  row.appendChild(aimBtn);
+  qRow.parentElement.insertBefore(row, qRow.nextSibling);
+  aimBtn.addEventListener('click', () => {
+    aimAssist = !aimAssist;
+    refreshAimLabel();
+  });
+  refreshAimLabel();
+})();
+
 $('reset-settings-btn').addEventListener('click', () => {
   settings = Object.assign({}, DEFAULT_SETTINGS);
-  quality = 'High';
+  quality = touchMode ? 'Low' : 'High';
   localStorage.setItem('arena_quality', quality);
   applyQuality();
   syncSettingsUI();
@@ -1827,9 +2107,9 @@ $('reset-settings-btn').addEventListener('click', () => {
   saveSettings();
 });
 
-/* ---------- extra control lines on the start screen ---------- */
+/* ---------- extra control lines on the start screen (PC list) ---------- */
 (function addControlLines() {
-  const list = document.querySelector('.controls');
+  const list = $('pc-controls') || document.querySelector('.controls');
   if (!list || !list.lastElementChild) return;
   const add = (key, text) => {
     const clone = list.lastElementChild.cloneNode(true);
@@ -1856,6 +2136,7 @@ $('reset-settings-btn').addEventListener('click', () => {
    17. INPUT: pointer lock, mouse, keyboard
    ===================================================== */
 document.addEventListener('pointerlockchange', () => {
+  if (touchMode) return;                         // phones never use pointer lock
   pointerLocked = document.pointerLockElement === canvas;
   if (pointerLocked) {
     hideOverlays();
@@ -1933,7 +2214,7 @@ function animate() {
   coreInner.rotation.x -= dt * 0.5;
 
   updateScope(dt);
-  aimLabel.style.display = gameState === 'running' ? 'block' : 'none';
+  aimLabel.style.display = (gameState === 'running' && !touchMode) ? 'block' : 'none';
 
   if (isPlaying()) {
     updateKeyLook(dt);
@@ -1952,6 +2233,20 @@ function animate() {
 /* =====================================================
    19. START UP
    ===================================================== */
+if (touchMode) {
+  // phone layout: show the touch controls and the phone version of the menus
+  document.body.classList.add('touch-mode');
+  $('touch-ui').classList.remove('hidden');
+  $('pc-controls').classList.add('hidden');
+  $('touch-controls').classList.remove('hidden');
+  $('fs-btn').classList.remove('hidden');
+  $('war-pc-note').classList.remove('hidden');
+  $('war-link').textContent = '⚔ WAR MODE (PC)';
+  const sensLabel = document.querySelector('label[for="sens"]');
+  if (sensLabel) sensLabel.textContent = 'Look Sensitivity';
+  setupTouchControls();
+}
+
 syncSettingsUI();
 $('best-start').textContent = best;
 updateHUD();

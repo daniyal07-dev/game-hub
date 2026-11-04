@@ -41,9 +41,34 @@
             transition: opacity 0.3s, transform 0.3s; z-index: 50;
         }
         #mp-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+        /* Phone / tablet notice: hidden everywhere except touch devices */
+        #phone-notice {
+            display: none;
+            align-items: center; justify-content: center; gap: 12px;
+            background: #1b1446; color: #fff;
+            border-bottom: 1px solid #00f0ff;
+            padding: 10px 14px; font-size: 14px; line-height: 1.4;
+            text-align: center;
+        }
+        #phone-notice button {
+            background: transparent; color: #fff; border: 1px solid #00f0ff;
+            border-radius: 8px; padding: 2px 10px; font-size: 14px; cursor: pointer;
+            flex-shrink: 0;
+        }
+        @media (pointer: coarse) {
+            #phone-notice { display: flex; }
+        }
+        #phone-notice.closed { display: none !important; }
     </style>
 </head>
 <body>
+
+    <!-- PHONE NOTICE (only shows on touch devices) -->
+    <div id="phone-notice">
+        <span>📱 <strong>Arena Mode</strong> works on phones with touch controls (play in landscape). 🖥 <strong>War Mode</strong> is best on a laptop or PC with keyboard and mouse.</span>
+        <button type="button" id="phone-notice-close" aria-label="Close">✕</button>
+    </div>
 
     <!-- NAVBAR: the bar at the top -->
     <header class="navbar">
@@ -139,6 +164,14 @@
                 toast.classList.add('show');
                 clearTimeout(toastTimer);
                 toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 3000);
+            });
+
+            // Phone notice: close button (remembered for this visit)
+            var notice = document.getElementById('phone-notice');
+            try { if (sessionStorage.getItem('phoneNoticeClosed') === '1') notice.classList.add('closed'); } catch (e) {}
+            document.getElementById('phone-notice-close').addEventListener('click', function () {
+                notice.classList.add('closed');
+                try { sessionStorage.setItem('phoneNoticeClosed', '1'); } catch (e) {}
             });
         })();
     </script>

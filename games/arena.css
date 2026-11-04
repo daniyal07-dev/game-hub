@@ -8,6 +8,8 @@ html, body {
   font-family: 'Segoe UI', Arial, sans-serif;
   color: #fff;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #game-container { position: fixed; inset: 0; }
@@ -222,14 +224,14 @@ body:not(.in-game) .game-ui { display: none !important; }
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto;
   background: rgba(5, 5, 20, 0.82);
   backdrop-filter: blur(6px);
 }
 
 .panel {
   width: min(540px, 92vw);
+  margin: auto;               /* centres the panel, and lets it scroll if too tall */
   padding: 36px 40px;
   text-align: center;
   background: rgba(15, 15, 40, 0.88);
@@ -288,8 +290,8 @@ body:not(.in-game) .game-ui { display: none !important; }
   box-shadow: 0 0 20px rgba(123, 47, 247, 0.5);
   transition: transform 0.15s, box-shadow 0.15s;
   font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:hover { transform: scale(1.05); box-shadow: 0 0 28px rgba(0, 240, 255, 0.6); }
 .btn.ghost {
   background: transparent;
   border: 1px solid rgba(0, 240, 255, 0.6);
@@ -297,7 +299,12 @@ body:not(.in-game) .game-ui { display: none !important; }
   font-size: 14px;
   padding: 11px 22px;
 }
-.btn.ghost:hover { background: rgba(0, 240, 255, 0.12); }
+/* hover effects only for devices with a real mouse */
+@media (hover: hover) {
+  .btn:hover { transform: scale(1.05); box-shadow: 0 0 28px rgba(0, 240, 255, 0.6); }
+  .btn.ghost:hover { background: rgba(0, 240, 255, 0.12); }
+}
+.btn:active { transform: scale(0.97); }
 
 .btn-row {
   margin-top: 16px;
@@ -330,3 +337,176 @@ body:not(.in-game) .game-ui { display: none !important; }
   color: #ffd84a;
   text-shadow: 0 0 14px rgba(255, 216, 74, 0.7);
 }
+
+/* =====================================================
+   TOUCH CONTROLS (phones). Only active when arena.js
+   adds the class "touch-mode" to <body>.
+   ===================================================== */
+
+#touch-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+/* touch controls only while playing */
+body:not(.in-game) #touch-ui { display: none !important; }
+
+/* left half = joystick area, right part = look area */
+#joy-zone, #look-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+#joy-zone  { left: 0;  width: 42%; }
+#look-zone { right: 0; width: 58%; }
+
+#joy-base {
+  position: absolute;
+  left: calc(6vw + env(safe-area-inset-left));
+  bottom: 16vh;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.10);
+  border: 2px solid rgba(0, 240, 255, 0.45);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.25);
+  pointer-events: none;
+}
+#joy-base.sprint {
+  border-color: rgba(255, 45, 149, 0.8);
+  box-shadow: 0 0 22px rgba(255, 45, 149, 0.5);
+}
+#joy-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;     /* JS moves it with transform */
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7ff6ff, #00b8d4);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.7);
+}
+
+/* round buttons */
+.t-btn {
+  position: absolute;
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: radial-gradient(circle at 35% 30%, #ff6fb5, #ff2d95 60%, #b0145f);
+  box-shadow: 0 0 22px rgba(255, 45, 149, 0.55);
+  color: #fff;
+  font-family: inherit;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.88;
+}
+.t-btn span { font-size: 11px; letter-spacing: 2px; margin-top: 3px; }
+.t-btn.active { transform: scale(0.92); opacity: 1; filter: brightness(1.25); }
+
+.t-btn.t-small {
+  width: 54px;
+  height: 54px;
+  font-size: 22px;
+  background: rgba(15, 15, 40, 0.65);
+  border: 2px solid rgba(0, 240, 255, 0.7);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
+}
+.t-btn.t-small.on {
+  background: rgba(0, 240, 255, 0.45);
+}
+
+#t-fire   { right: calc(26px + env(safe-area-inset-right)); bottom: 26px; }
+#t-reload { right: 136px; bottom: 34px; }
+#t-scope  { right: 50px;  bottom: 136px; }
+#t-pause  { right: calc(14px + env(safe-area-inset-right)); top: 70px; }
+
+/* rotate-your-phone message */
+#rotate-msg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #0a0a1a;
+  color: #00f0ff;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 20px;
+}
+#rotate-msg .rot-icon { font-size: 60px; }
+@media (orientation: portrait) {
+  body.touch-mode #rotate-msg { display: flex; }
+}
+
+/* ---------- Phone layout (touch-mode): compact HUD ---------- */
+body.touch-mode #wave-info { top: 8px; }
+body.touch-mode #wave-label { font-size: 17px; letter-spacing: 3px; }
+body.touch-mode #enemy-label { font-size: 12px; }
+body.touch-mode #squad-alert { top: 52px; font-size: 13px; letter-spacing: 1px; }
+body.touch-mode #wave-banner { top: 18%; }
+body.touch-mode #banner-title { font-size: 34px; letter-spacing: 4px; }
+body.touch-mode #banner-sub { font-size: 14px; margin-top: 6px; }
+body.touch-mode #reload-msg { top: 62%; font-size: 15px; }
+
+body.touch-mode #health-box {
+  left: calc(14px + env(safe-area-inset-left));
+  top: 10px;
+  bottom: auto;
+  width: 150px;
+}
+body.touch-mode .hud-label { font-size: 10px; margin-bottom: 2px; }
+body.touch-mode #health-bar { height: 12px; }
+body.touch-mode #health-text { font-size: 16px; margin-top: 2px; }
+
+body.touch-mode #score-box {
+  top: 10px;
+  right: calc(14px + env(safe-area-inset-right));
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+body.touch-mode #score-box span { font-size: 22px; }
+
+body.touch-mode #ammo-box {
+  left: 50%;
+  right: auto;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 22px;
+}
+
+/* touch-mode menus: smaller and tidier on a phone */
+body.touch-mode .panel { padding: 16px 22px; width: min(560px, 94vw); }
+body.touch-mode .panel h1 { font-size: 30px; letter-spacing: 3px; }
+body.touch-mode .panel h2 { font-size: 24px; margin-bottom: 12px; letter-spacing: 4px; }
+body.touch-mode .subtitle { font-size: 13px; }
+body.touch-mode .best-line { margin: 8px 0 2px; font-size: 13px; }
+body.touch-mode .controls { margin: 10px 0 14px; font-size: 12px; gap: 5px 14px; }
+body.touch-mode .controls b { min-width: 0; margin-right: 4px; }
+body.touch-mode .btn { padding: 12px 24px; font-size: 15px; }
+body.touch-mode .btn.ghost { padding: 9px 14px; font-size: 12px; }
+body.touch-mode .btn-row { margin-top: 10px; gap: 8px; }
+body.touch-mode .setting-row { grid-template-columns: 110px 1fr 48px; margin: 9px 0; gap: 8px; }
+body.touch-mode .setting-row label { font-size: 13px; }
+body.touch-mode .stats { margin: 2px 0 12px; font-size: 14px; line-height: 1.7; }
+body.touch-mode .record { font-size: 16px; }

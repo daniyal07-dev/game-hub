@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>3D AI Arena</title>
   <link rel="stylesheet" href="arena.css">
 
@@ -55,6 +55,24 @@
 
   <div id="reload-msg" class="game-ui">RELOADING...</div>
 
+  <!-- TOUCH CONTROLS (phones only, shown by arena.js) -->
+  <div id="touch-ui" class="hidden">
+    <div id="look-zone"></div>
+    <div id="joy-zone">
+      <div id="joy-base"><div id="joy-knob"></div></div>
+    </div>
+    <button id="t-pause" class="t-btn t-small" type="button">❚❚</button>
+    <button id="t-scope" class="t-btn t-small" type="button">◎</button>
+    <button id="t-reload" class="t-btn t-small" type="button">R</button>
+    <button id="t-fire" class="t-btn" type="button">🔥<span>FIRE</span></button>
+  </div>
+
+  <!-- Shown on phones held upright -->
+  <div id="rotate-msg">
+    <div class="rot-icon">📱↻</div>
+    <div>Rotate your phone to landscape</div>
+  </div>
+
   <!-- Start screen -->
   <div id="start-screen" class="overlay">
     <div class="panel">
@@ -64,7 +82,7 @@
         Best score: <span id="best-start">0</span>
       </p>
 
-      <ul class="controls">
+      <ul class="controls" id="pc-controls">
         <li><b>W A S D</b> Move</li>
         <li><b>Shift</b> Sprint</li>
         <li><b>Mouse</b> Look</li>
@@ -74,13 +92,29 @@
         <li><b>T</b> AI Assistant</li>
       </ul>
 
-      <!-- NEW: Side-by-side Play Arena and War Mode buttons -->
+      <ul class="controls hidden" id="touch-controls">
+        <li><b>Left thumb</b> Joystick to move (push far = sprint)</li>
+        <li><b>Right thumb</b> Drag to look</li>
+        <li><b>🔥 FIRE</b> Hold to shoot</li>
+        <li><b>R</b> Reload</li>
+        <li><b>◎</b> Scope</li>
+        <li><b>❚❚</b> Pause</li>
+      </ul>
+
+      <!-- Side-by-side Play Arena and War Mode buttons -->
       <div style="margin-bottom: 16px;">
         <button id="play-btn" class="btn">▶ PLAY ARENA</button>
-        <a class="btn" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7); margin-left: 10px;" href="war.html">⚔ WAR MODE</a>
+        <a id="war-link" class="btn" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7); margin-left: 10px;" href="war.html">⚔ WAR MODE</a>
       </div>
 
+      <p id="war-pc-note" class="hidden" style="font-size:12px; opacity:0.7; margin:-6px 0 14px;">
+        War Mode is best on PC (keyboard and mouse).
+      </p>
+
       <div class="btn-row">
+        <button id="fs-btn" class="btn ghost hidden" type="button">
+          ⛶ Fullscreen
+        </button>
         <button id="start-settings-btn" class="btn ghost">
           ⚙ Settings
         </button>
