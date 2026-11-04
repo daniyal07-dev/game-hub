@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Hub | NOVA STRIKE 3D</title>
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Small extra styles for this page only -->
+    <style>
+        /* The modes section is hidden until the Explore button is pressed */
+        .games.is-hidden { display: none; }
+
+        /* Three equal cards in one row */
+        .games-grid { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 900px) {
+            .games-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Small line above the big title */
+        .hero-kicker {
+            letter-spacing: 6px; font-size: 0.95rem; font-weight: 700;
+            color: #9a9ac0; margin-bottom: 14px; text-transform: uppercase;
+        }
+
+        /* Line under the section heading */
+        .section-sub {
+            text-align: center; color: #9a9ac0;
+            margin: -10px 0 30px; font-size: 1.05rem; letter-spacing: 1px;
+        }
+
+        /* Small message shown by the Multiplayer button */
+        #mp-toast {
+            position: fixed; left: 50%; bottom: 40px;
+            transform: translate(-50%, 20px);
+            background: #1b1446; color: #fff;
+            border: 1px solid #00f0ff; border-radius: 12px;
+            padding: 14px 24px; font-size: 15px;
+            box-shadow: 0 0 24px rgba(0, 240, 255, 0.35);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s; z-index: 50;
+        }
+        #mp-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR: the bar at the top -->
+    <header class="navbar">
+        <div class="logo"><span class="logo-icon">▶</span>GAME<span class="logo-accent">HUB</span></div>
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="#games">Games</a>
+            <a href="more-games.html">More Games</a>
+        </nav>
+    </header>
+
+    <!-- HERO: the big welcome section -->
+    <section class="hero">
+        <div class="hero-kicker">Tactical AI Combat</div>
+        <h1><span class="glow">NOVA STRIKE 3D</span></h1>
+        <p>The flagship game of Game Hub. Fight AI enemies, command a squad, or battle real players, all in your browser.</p>
+        <a href="#games" class="btn">Explore NOVA STRIKE 3D</a>
+    </section>
+
+    <!-- MODES SECTION (hidden until the Explore button is pressed) -->
+    <section class="games is-hidden" id="games">
+        <h2 class="section-title">Choose Your Mode</h2>
+        <p class="section-sub">Three ways to play NOVA STRIKE 3D</p>
+
+        <div class="games-grid">
+
+            <!-- Mode 1: Arena -->
+            <div class="card">
+                <span class="tag">⭐ SURVIVAL</span>
+                <h3>Arena Mode</h3>
+                <p>Survive waves of AI-controlled enemies in a full 3D arena, with sound, menus and an in-game AI assistant.</p>
+                <a href="games/arena.html" class="btn small">▶ Play Arena Mode</a>
+            </div>
+
+            <!-- Mode 2: War -->
+            <div class="card">
+                <span class="tag" style="background: #ff2d95; color: #fff;">🔥 CAMPAIGN</span>
+                <h3>War Mode</h3>
+                <p>Command a 4-man AI squad through 5 tactical stages and a boss finale.</p>
+                <a href="games/war.html" class="btn small" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7);">▶ Deploy</a>
+            </div>
+
+            <!-- Mode 3: Multiplayer (in development) -->
+            <div class="card">
+                <span class="tag" style="background: #7b2ff7; color: #fff;">🚧 IN DEVELOPMENT</span>
+                <h3>Multiplayer</h3>
+                <p>Real online players instead of AI. Battle in 1v1, 2v2, 3v3 or 4v4 teams.</p>
+                <a href="#" class="btn small" id="mp-btn" style="background: linear-gradient(90deg, #00f0ff, #7b2ff7); color: #fff;">🌐 Coming Soon</a>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>Built for <strong>AI/IT Expo 2026</strong> · Forte Colleges of Excellence, Sargodha</p>
+        <p class="footer-small">Designed and developed by Daniyal</p>
+    </footer>
+
+    <div id="mp-toast">🚧 Multiplayer is in development. Online 1v1 to 4v4 battles are coming soon!</div>
+
+    <script src="js/main.js"></script>
+
+    <script>
+        // Show the modes section only after the Explore button (or the Games link) is pressed
+        (function () {
+            var section = document.getElementById('games');
+
+            function showGames() {
+                section.classList.remove('is-hidden');
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            document.querySelectorAll('a[href="#games"]').forEach(function (link) {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    showGames();
+                    history.replaceState(null, '', '#games');
+                });
+            });
+
+            // If the page is opened as index.html#games, show the modes straight away
+            if (location.hash === '#games') {
+                section.classList.remove('is-hidden');
+                setTimeout(showGames, 50);
+            }
+
+            // Multiplayer button: show a short message instead of opening a page
+            var toast = document.getElementById('mp-toast');
+            var toastTimer = null;
+            document.getElementById('mp-btn').addEventListener('click', function (e) {
+                e.preventDefault();
+                toast.classList.add('show');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 3000);
+            });
+        })();
+    </script>
+
+    <!-- NOVA assistant (press T) -->
+    <script type="module" src="games/assistant.js"></script>
+</body>
+</html>

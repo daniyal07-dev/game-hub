@@ -1,0 +1,271 @@
+/* =====================================================
+   WAR MODE: extra styles (arena.css is loaded first)
+   ===================================================== */
+
+/* ---------- stage select (start screen) ---------- */
+.panel.wide {
+  max-width: 820px;
+  width: 92vw;
+}
+
+#stage-list {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+
+.stage-card {
+  position: relative;
+  background: rgba(20, 20, 50, 0.7);
+  border: 1px solid rgba(123, 47, 247, 0.5);
+  border-radius: 10px;
+  padding: 12px 8px;
+  color: #e8ecff;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.stage-card:hover {
+  transform: translateY(-3px);
+  border-color: #00f0ff;
+}
+.stage-card.selected {
+  border-color: #00f0ff;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.55);
+  background: rgba(0, 240, 255, 0.1);
+}
+.stage-card.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+.stage-card.locked:hover {
+  transform: none;
+  border-color: rgba(123, 47, 247, 0.5);
+}
+.stage-num {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #ff2d95;
+  font-weight: 700;
+}
+.stage-name {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 6px 0 4px;
+  color: #00f0ff;
+}
+.stage-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #a9b0d8;
+  min-height: 44px;
+}
+.stage-stars {
+  margin-top: 6px;
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: #ffd84a;
+}
+
+#start-screen .btn-row {
+  flex-wrap: wrap;
+}
+
+/* ---------- squad panel (top left) ---------- */
+#team-panel {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 210px;
+  padding: 10px 12px;
+  background: rgba(10, 10, 30, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 10px;
+  pointer-events: none;
+}
+.team-title {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #00f0ff;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #e8ecff;
+  transition: opacity 0.3s;
+}
+.team-icon { width: 18px; text-align: center; }
+.team-name { width: 52px; font-weight: 600; }
+.team-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.team-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #3dff9a, #00f0ff);
+  border-radius: 5px;
+  transition: width 0.25s;
+}
+.team-row.low .team-fill {
+  background: linear-gradient(90deg, #ff2d95, #ffd84a);
+}
+.team-row.dead {
+  opacity: 0.35;
+}
+.team-row.dead .team-name {
+  text-decoration: line-through;
+}
+#order-label {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #ffd84a;
+  font-weight: 700;
+}
+
+/* ---------- radar (right side, under the score) ---------- */
+#radar-box {
+  position: fixed;
+  top: 110px;
+  right: 24px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.35), inset 0 0 20px rgba(0, 240, 255, 0.15);
+  background: rgba(5, 8, 25, 0.65);
+  overflow: hidden;
+  pointer-events: none;
+}
+#radar {
+  display: block;
+  width: 180px;
+  height: 180px;
+}
+
+/* ---------- objective tracker (left, under the squad panel) ---------- */
+#objective {
+  position: fixed;
+  top: 275px;
+  left: 20px;
+  width: 210px;
+  padding: 10px 12px;
+  background: rgba(10, 10, 30, 0.6);
+  border-left: 3px solid #ff2d95;
+  border-radius: 6px;
+  pointer-events: none;
+}
+#objective-title {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #ff2d95;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#objective-text {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #ffffff;
+}
+
+/* ---------- commander messages (bottom centre) ---------- */
+#comms {
+  position: fixed;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  width: min(560px, 80vw);
+  padding: 10px 16px;
+  background: rgba(10, 10, 30, 0.75);
+  border: 1px solid rgba(123, 47, 247, 0.7);
+  border-left: 4px solid #00f0ff;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+#comms.show { opacity: 1; }
+#comms-name {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #00f0ff;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+#comms-text {
+  font-size: 15px;
+  line-height: 1.4;
+  color: #ffffff;
+}
+
+/* ---------- weapon info + weapon bar ---------- */
+#weapon-name {
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: #ff2d95;
+  font-weight: 700;
+  text-align: right;
+}
+#grenade-count {
+  font-size: 15px;
+  color: #ffd84a;
+  text-align: right;
+  margin-top: 4px;
+}
+
+#weapon-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  gap: 10px;
+  pointer-events: none;
+}
+body.in-game #weapon-bar {
+  display: flex;
+}
+.weapon-slot {
+  padding: 6px 14px;
+  background: rgba(10, 10, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #a9b0d8;
+}
+.weapon-slot b {
+  color: #00f0ff;
+  margin-right: 4px;
+}
+.weapon-slot.active {
+  border-color: #00f0ff;
+  color: #ffffff;
+  background: rgba(0, 240, 255, 0.18);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+}
+
+/* ---------- stage complete screen ---------- */
+#result-stars {
+  font-size: 44px;
+  letter-spacing: 8px;
+  color: #ffd84a;
+  text-shadow: 0 0 16px rgba(255, 216, 74, 0.7);
+  margin: 6px 0 14px;
+  text-align: center;
+}
+#result-title {
+  color: #3dff9a;
+}

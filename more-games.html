@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>More Games | GameHub</title>
+<script src="js/main.js"></script>
+<style>
+  :root {
+    --bg: #0a0a1a;
+    --bg2: #12122b;
+    --card: #14142e;
+    --text: #e8e8ff;
+    --muted: #9a9ac0;
+    --border: #26264d;
+    --cyan: #00f0ff;
+    --purple: #7b2ff7;
+    --pink: #ff2d95;
+    --green: #3dff9a;
+    --yellow: #ffd84a;
+    --nav-bg: rgba(10,10,26,0.85);
+    --glow1: rgba(123,47,247,0.18);
+    --glow2: rgba(0,240,255,0.12);
+  }
+  html[data-theme="light"] {
+    --bg: #f3f5ff;
+    --bg2: #e9ecfa;
+    --card: #ffffff;
+    --text: #252540;
+    --muted: #51516e;
+    --border: #d2d5eb;
+    --cyan: #0077b6;
+    --purple: #6a1fd6;
+    --pink: #d6196f;
+    --green: #0a8f55;
+    --yellow: #8a6200;
+    --nav-bg: rgba(255,255,255,0.9);
+    --glow1: rgba(123,47,247,0.10);
+    --glow2: rgba(0,170,255,0.10);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-image:
+      radial-gradient(circle at 15% 10%, var(--glow1), transparent 40%),
+      radial-gradient(circle at 85% 0%, var(--glow2), transparent 40%);
+    background-attachment: fixed;
+  }
+
+  /* ---------- Navbar ---------- */
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 6%;
+    background: var(--nav-bg);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.3rem; text-decoration: none; color: var(--text); letter-spacing: 1px; }
+  .logo-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, #00f0ff, #7b2ff7);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 0.95rem;
+  }
+  .logo b { color: var(--cyan); }
+  .nav-links { display: flex; align-items: center; gap: 26px; list-style: none; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-weight: 600; transition: color .2s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--cyan); }
+
+  /* ---------- Header ---------- */
+  .page-head { text-align: center; padding: 50px 6% 20px; }
+  .page-head h1 {
+    font-size: 2.6rem; margin-bottom: 10px;
+    background: linear-gradient(90deg, var(--cyan), var(--purple), var(--pink));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .page-head p { color: var(--muted); max-width: 640px; margin: 0 auto; line-height: 1.6; }
+
+  /* ---------- Controls ---------- */
+  .controls { max-width: 1100px; margin: 30px auto 10px; padding: 0 6%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .search {
+    width: 100%; max-width: 420px;
+    padding: 12px 18px; border-radius: 30px;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-size: 1rem; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .search:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(0,170,255,0.3); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .chip {
+    padding: 8px 18px; border-radius: 20px; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--muted); font-weight: 600; font-size: 0.9rem;
+    transition: all .2s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--cyan); }
+  .chip.active { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #fff; border-color: transparent; }
+
+  /* ---------- Grid ---------- */
+  .grid {
+    max-width: 1100px; margin: 20px auto 50px; padding: 0 6%;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 22px;
+    flex: 1; width: 100%; align-content: start;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative; overflow: hidden;
+    transition: transform .25s, box-shadow .25s, border-color .25s;
+  }
+  .card::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--accent, var(--cyan));
+  }
+  .card:hover { transform: translateY(-6px); border-color: var(--accent, var(--cyan)); box-shadow: 0 10px 28px rgba(0,0,0,0.25), 0 0 18px var(--glow, rgba(0,240,255,0.25)); }
+  .card .icon { font-size: 2.2rem; }
+  .card h3 { font-size: 1.15rem; }
+  html[data-theme="light"] .card { --tagc: var(--accent-l); }
+  .card .tag {
+    align-self: flex-start; font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 10px;
+    color: var(--tagc, var(--accent, var(--cyan))); border: 1px solid var(--tagc, var(--accent, var(--cyan)));
+  }
+  .card p { color: var(--muted); font-size: 0.92rem; line-height: 1.5; flex: 1; }
+  .visit {
+    margin-top: 6px; text-align: center; text-decoration: none; font-weight: 700;
+    padding: 10px; border-radius: 8px; color: #fff;
+    background: linear-gradient(135deg, var(--cyan), var(--purple));
+    transition: filter .2s, transform .15s;
+  }
+  .visit:hover { filter: brightness(1.15); transform: scale(1.03); }
+
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 40px 0; display: none; }
+
+  /* ---------- Footer ---------- */
+  footer { text-align: center; padding: 24px 6%; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+  footer b { color: var(--cyan); }
+
+  /* ---------- Phone ---------- */
+  @media (max-width: 700px) {
+    .nav-links { gap: 12px; font-size: 0.88rem; }
+    .logo { font-size: 1.1rem; }
+    .page-head h1 { font-size: 1.9rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="logo"><span class="logo-icon">▶</span>GAME<b>HUB</b></a>
+  <ul class="nav-links">
+    <li><a href="index.html">Home</a></li>
+    <li><a href="index.html#games">Games</a></li>
+    <li><a href="more-games.html" class="active">More Games</a></li>
+  </ul>
+</nav>
+
+<header class="page-head">
+  <h1>More Games</h1>
+  <p>Quick games you can play right here in Game Hub. Pick a category or search by name.</p>
+</header>
+
+<section class="controls">
+  <input type="text" id="search" class="search" placeholder="🔍 Search games...">
+  <div class="chips" id="chips"></div>
+</section>
+
+<main class="grid" id="grid">
+  <div class="empty" id="empty">No games match your search. Try another word!</div>
+</main>
+
+<footer>
+  Built for <b>AI/IT Expo 2026</b> · Forte Colleges of Excellence, Sargodha<br>
+  Designed and developed by Daniyal
+</footer>
+
+<script>
+  // ---------- Data: add or remove games here ----------
+  // "color" is used in dark mode, "light" is a darker version used in light mode.
+  var CATEGORIES = {
+    ai:     { label: "AI Games", color: "#00f0ff", light: "#0077b6", glow: "rgba(0,240,255,0.3)" },
+    arcade: { label: "Arcade",   color: "#3dff9a", light: "#0a8f55", glow: "rgba(61,255,154,0.3)" }
+  };
+
+  var GAMES = [
+    { name: "Tic Tac Toe vs AI", cat: "ai",     icon: "⭕", url: "games/tictactoe.html", desc: "Can you beat an AI that never makes a mistake?" },
+    { name: "Snake",             cat: "arcade", icon: "🐍", url: "games/snake.html",     desc: "The classic game. How long can you survive?" }
+  ];
+
+  var grid = document.getElementById("grid");
+  var chipsBox = document.getElementById("chips");
+  var searchBox = document.getElementById("search");
+  var emptyMsg = document.getElementById("empty");
+  var currentCat = "all";
+
+  // ---------- Build filter chips ----------
+  function makeChip(key, label) {
+    var b = document.createElement("button");
+    b.className = "chip" + (key === "all" ? " active" : "");
+    b.textContent = label;
+    b.setAttribute("data-cat", key);
+    b.onclick = function () {
+      currentCat = key;
+      var all = chipsBox.querySelectorAll(".chip");
+      for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
+      b.classList.add("active");
+      applyFilter();
+    };
+    chipsBox.appendChild(b);
+  }
+  makeChip("all", "All");
+  for (var key in CATEGORIES) makeChip(key, CATEGORIES[key].label);
+
+  // ---------- Build cards ----------
+  GAMES.forEach(function (g) {
+    var c = CATEGORIES[g.cat];
+    var card = document.createElement("div");
+    card.className = "card";
+    card.setAttribute("data-cat", g.cat);
+    card.setAttribute("data-name", (g.name + " " + g.desc).toLowerCase());
+    card.style.setProperty("--accent", c.color);
+    card.style.setProperty("--accent-l", c.light);
+    card.style.setProperty("--glow", c.glow);
+    card.innerHTML =
+      '<div class="icon">' + g.icon + '</div>' +
+      '<h3>' + g.name + '</h3>' +
+      '<span class="tag">' + c.label + '</span>' +
+      '<p>' + g.desc + '</p>' +
+      '<a class="visit" href="' + g.url + '">▶ Play</a>';
+    grid.insertBefore(card, emptyMsg);
+  });
+
+  // ---------- Filter + search ----------
+  function applyFilter() {
+    var q = searchBox.value.trim().toLowerCase();
+    var cards = grid.querySelectorAll(".card");
+    var shown = 0;
+    for (var i = 0; i < cards.length; i++) {
+      var okCat = currentCat === "all" || cards[i].getAttribute("data-cat") === currentCat;
+      var okText = q === "" || cards[i].getAttribute("data-name").indexOf(q) !== -1;
+      var show = okCat && okText;
+      cards[i].style.display = show ? "flex" : "none";
+      if (show) shown++;
+    }
+    emptyMsg.style.display = shown === 0 ? "block" : "none";
+  }
+  searchBox.addEventListener("input", applyFilter);
+</script>
+</body>
+</html>

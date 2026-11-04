@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>War Mode · NOVA STRIKE 3D</title>
+  <link rel="stylesheet" href="arena.css">
+  <link rel="stylesheet" href="war.css">
+
+  <style>
+    /* Boss Fight button (start screen) */
+    #boss-btn {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      background: linear-gradient(135deg, #ff2d4a, #8a0f2a);
+      color: #fff;
+      border: 1px solid rgba(255, 80, 100, 0.6);
+      box-shadow: 0 0 18px rgba(255, 45, 74, 0.35);
+    }
+    #boss-btn:hover:not(:disabled) {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+    }
+    #boss-btn:disabled,
+    #boss-btn.locked {
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+    #boss-hint {
+      margin: 6px 0 0;
+      font-size: 12px;
+      text-align: center;
+      opacity: 0.6;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div id="game-container"></div>
+  <div id="damage-flash"></div>
+
+  <!-- In-game interface -->
+  <div id="crosshair" class="game-ui"></div>
+  <div id="hitmarker" class="game-ui"></div>
+
+  <!-- Stage + objective (top centre) -->
+  <div id="wave-info" class="game-ui">
+    <div id="wave-label">STAGE 1</div>
+    <div id="enemy-label">OBJECTIVE</div>
+  </div>
+
+  <div id="squad-alert" class="game-ui"></div>
+
+  <div id="wave-banner" class="game-ui">
+    <div id="banner-title"></div>
+    <div id="banner-sub"></div>
+  </div>
+
+  <!-- Commander messages (NOVA briefings) -->
+  <div id="comms" class="game-ui">
+    <div id="comms-name">COMMAND</div>
+    <div id="comms-text"></div>
+  </div>
+
+  <!-- Team panel (top left) -->
+  <div id="team-panel" class="game-ui">
+    <div class="team-title">SQUAD</div>
+    <div class="team-row" id="tm0">
+      <span class="team-icon">⚔</span>
+      <span class="team-name">Alpha</span>
+      <div class="team-bar"><div class="team-fill"></div></div>
+    </div>
+    <div class="team-row" id="tm1">
+      <span class="team-icon">⚔</span>
+      <span class="team-name">Bravo</span>
+      <div class="team-bar"><div class="team-fill"></div></div>
+    </div>
+    <div class="team-row" id="tm2">
+      <span class="team-icon">🎯</span>
+      <span class="team-name">Hawk</span>
+      <div class="team-bar"><div class="team-fill"></div></div>
+    </div>
+    <div class="team-row" id="tm3">
+      <span class="team-icon">✚</span>
+      <span class="team-name">Doc</span>
+      <div class="team-bar"><div class="team-fill"></div></div>
+    </div>
+    <div id="order-label">ORDER: FOLLOW</div>
+  </div>
+
+  <!-- Radar (right side) -->
+  <div id="radar-box" class="game-ui">
+    <canvas id="radar" width="180" height="180"></canvas>
+  </div>
+
+  <!-- Objective tracker -->
+  <div id="objective" class="game-ui">
+    <div id="objective-title">OBJECTIVE</div>
+    <div id="objective-text">-</div>
+  </div>
+
+  <!-- Main HUD (bottom) -->
+  <div id="hud" class="game-ui">
+    <div id="health-box">
+      <div class="hud-label">HEALTH</div>
+      <div id="health-bar">
+        <div id="health-fill"></div>
+      </div>
+      <div id="health-text">100</div>
+    </div>
+
+    <div id="score-box">
+      SCORE <span id="score">0</span>
+    </div>
+
+    <div id="ammo-box">
+      <div id="weapon-name">PISTOL</div>
+      <span id="ammo">12 / 12</span>
+      <div id="grenade-count">💣 x3</div>
+    </div>
+  </div>
+
+  <div id="weapon-bar" class="game-ui">
+    <div class="weapon-slot" id="slot1"><b>1</b> Pistol</div>
+    <div class="weapon-slot" id="slot2"><b>2</b> Rifle</div>
+    <div class="weapon-slot" id="slot3"><b>3</b> Shotgun</div>
+  </div>
+
+  <div id="reload-msg" class="game-ui">RELOADING...</div>
+
+  <!-- Start screen: mission select -->
+  <div id="start-screen" class="overlay">
+    <div class="panel wide">
+      <h1>WAR <span>MODE</span></h1>
+      <p class="subtitle">Lead your squad through 5 stages</p>
+
+      <div id="stage-list"></div>
+
+      <p class="best-line">
+        Selected: <span id="selected-stage">Stage 1</span>
+      </p>
+
+      <ul class="controls">
+        <li><b>W A S D</b> Move</li>
+        <li><b>Shift</b> Sprint</li>
+        <li><b>Mouse</b> Look</li>
+        <li><b>Click</b> Shoot</li>
+        <li><b>R</b> Reload</li>
+        <li><b>1 2 3</b> Weapons</li>
+        <li><b>G</b> Grenade</li>
+        <li><b>Z</b> Squad: Follow</li>
+        <li><b>X</b> Squad: Hold</li>
+        <li><b>C</b> Squad: Attack my target</li>
+        <li><b>Esc</b> Pause</li>
+      </ul>
+
+      <button id="play-btn" class="btn">▶ DEPLOY</button>
+
+      <!-- Boss Fight: locked until Stage 1 is cleared -->
+      <button id="boss-btn" class="btn locked" disabled>🔒 BOSS FIGHT</button>
+      <p id="boss-hint">Clear Stage 1 to unlock the Boss Fight</p>
+
+      <div class="btn-row">
+        <button id="start-settings-btn" class="btn ghost">⚙ Settings</button>
+        <button id="unlock-btn" class="btn ghost">🔓 Unlock All</button>
+        <a class="btn ghost" href="arena.html">← Arena</a>
+        <a class="btn ghost" href="../index.html">← Hub</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause screen -->
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>PAUSED</h2>
+
+      <button id="resume-btn" class="btn">▶ RESUME</button>
+
+      <div class="btn-row">
+        <button id="pause-settings-btn" class="btn ghost">⚙ Settings</button>
+        <button id="quit-btn" class="btn ghost">Quit to Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings screen -->
+  <div id="settings-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>SETTINGS</h2>
+
+      <div class="setting-row">
+        <label for="vol-master">Master Volume</label>
+        <input type="range" id="vol-master" min="0" max="100" step="1">
+        <span id="vol-master-val">80%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="vol-sfx">Effects Volume</label>
+        <input type="range" id="vol-sfx" min="0" max="100" step="1">
+        <span id="vol-sfx-val">80%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="vol-music">Music Volume</label>
+        <input type="range" id="vol-music" min="0" max="100" step="1">
+        <span id="vol-music-val">50%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="sens">Mouse Sensitivity</label>
+        <input type="range" id="sens" min="0.3" max="2.5" step="0.1">
+        <span id="sens-val">1.0x</span>
+      </div>
+
+      <div class="btn-row">
+        <button id="reset-settings-btn" class="btn ghost">Reset</button>
+        <button id="settings-back-btn" class="btn">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage complete screen -->
+  <div id="result-screen" class="overlay hidden">
+    <div class="panel">
+      <h2 id="result-title">STAGE COMPLETE</h2>
+      <div id="result-stars">★★★</div>
+
+      <div class="stats">
+        <div>Time <b id="result-time">0:00</b></div>
+        <div>Enemies down <b id="result-kills">0</b></div>
+        <div>Squad survivors <b id="result-squad">4 / 4</b></div>
+        <div>Score <b id="result-score">0</b></div>
+      </div>
+
+      <button id="next-btn" class="btn">▶ NEXT STAGE</button>
+
+      <div class="btn-row">
+        <button id="retry-btn" class="btn ghost">↻ Replay</button>
+        <button id="result-menu-btn" class="btn ghost">Stage Select</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mission failed screen -->
+  <div id="gameover-screen" class="overlay hidden">
+    <div class="panel">
+      <h2 class="danger">MISSION FAILED</h2>
+
+      <div class="stats">
+        <div>Stage <b id="final-stage">1</b></div>
+        <div>Enemies down <b id="final-kills">0</b></div>
+        <div>Score <b id="final-score">0</b></div>
+      </div>
+
+      <button id="restart-btn" class="btn">↻ TRY AGAIN</button>
+
+      <div class="btn-row">
+        <button id="menu-btn" class="btn ghost">Stage Select</button>
+        <a class="btn ghost" href="../index.html">← Back to Hub</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="war/main.js"></script>
+  <!-- NOVA assistant (press T) -->
+  <script type="module" src="assistant.js"></script>
+</body>
+</html>

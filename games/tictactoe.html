@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic Tac Toe vs AI | GameHub</title>
+  <link rel="stylesheet" href="tictactoe.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="back" href="../index.html">← Back to Hub</a>
+    <div class="brand"><span class="logo">▶</span> GAME<b>HUB</b></div>
+    <button id="sound-btn" class="icon-btn" title="Sound on/off">🔊</button>
+  </header>
+
+  <main class="game">
+    <h1>TIC TAC TOE <span>vs AI</span></h1>
+
+    <div class="scoreboard">
+      <div class="score you">
+        <small>YOU (<span id="you-mark">X</span>)</small>
+        <b id="score-player">0</b>
+      </div>
+      <div class="score draw">
+        <small>DRAWS</small>
+        <b id="score-draw">0</b>
+      </div>
+      <div class="score ai">
+        <small>AI (<span id="ai-mark">O</span>)</small>
+        <b id="score-ai">0</b>
+      </div>
+    </div>
+
+    <div id="status" class="status">Your turn</div>
+
+    <div id="board" class="board">
+      <button class="cell" data-i="0" aria-label="Cell 1"></button>
+      <button class="cell" data-i="1" aria-label="Cell 2"></button>
+      <button class="cell" data-i="2" aria-label="Cell 3"></button>
+      <button class="cell" data-i="3" aria-label="Cell 4"></button>
+      <button class="cell" data-i="4" aria-label="Cell 5"></button>
+      <button class="cell" data-i="5" aria-label="Cell 6"></button>
+      <button class="cell" data-i="6" aria-label="Cell 7"></button>
+      <button class="cell" data-i="7" aria-label="Cell 8"></button>
+      <button class="cell" data-i="8" aria-label="Cell 9"></button>
+    </div>
+
+    <div id="ai-info" class="ai-info">🧠 AI brain: waiting for your move...</div>
+
+    <div class="options">
+      <div class="opt-group">
+        <span class="opt-label">DIFFICULTY</span>
+        <div class="seg" id="level-group">
+          <button data-level="easy">Easy</button>
+          <button data-level="medium">Medium</button>
+          <button data-level="hard" class="active">Unbeatable</button>
+        </div>
+      </div>
+
+      <div class="opt-group">
+        <span class="opt-label">YOU PLAY AS</span>
+        <div class="seg" id="side-group">
+          <button data-side="X" class="active">X (first)</button>
+          <button data-side="O">O (second)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="new-btn" class="btn">↻ NEW GAME</button>
+      <button id="reset-btn" class="btn ghost">Reset Scores</button>
+    </div>
+
+    <details class="how">
+      <summary>🧠 How does the unbeatable AI work?</summary>
+      <p>
+        The AI uses an algorithm called <b>Minimax</b>. Before it moves, it
+        imagines every possible future of the game: its move, your reply,
+        its next move, and so on until the game ends. It scores each ending
+        (win, draw, loss) and picks the move that leads to the best result
+        even if you play perfectly. It also uses <b>alpha-beta pruning</b>
+        to skip branches that cannot matter, so it is fast. Because Tic Tac
+        Toe is small, the AI can see everything, so the best you can get is
+        a draw.
+      </p>
+    </details>
+  </main>
+
+  <script src="tictactoe.js"></script>
+</body>
+</html>

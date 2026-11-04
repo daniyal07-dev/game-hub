@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake | GameHub</title>
+  <link rel="stylesheet" href="snake.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="back" href="../index.html">← Back to Hub</a>
+    <div class="brand"><span class="logo">▶</span> GAME<b>HUB</b></div>
+    <button id="sound-btn" class="icon-btn" title="Sound on/off">🔊</button>
+  </header>
+
+  <main class="game">
+    <h1>NEON <span>SNAKE</span></h1>
+
+    <div class="scoreboard">
+      <div class="score you">
+        <small>SCORE</small>
+        <b id="score">0</b>
+      </div>
+      <div class="score best">
+        <small>BEST</small>
+        <b id="best">0</b>
+      </div>
+      <div class="score len">
+        <small>LENGTH</small>
+        <b id="length">3</b>
+      </div>
+    </div>
+
+    <div id="stage" class="stage">
+      <canvas id="canvas" width="440" height="440"></canvas>
+
+      <div id="overlay" class="overlay">
+        <h2 id="overlay-title">READY?</h2>
+        <p id="overlay-sub">Arrow keys or WASD to steer</p>
+        <button id="start-btn" class="btn">▶ START</button>
+      </div>
+    </div>
+
+    <div id="ai-info" class="ai-info">🎮 You are in control. Turn on AI Autopilot to watch the AI play!</div>
+
+    <div class="options">
+      <div class="opt-group">
+        <span class="opt-label">MODE</span>
+        <div class="seg" id="mode-group">
+          <button data-mode="walls" class="active">Walls</button>
+          <button data-mode="wrap">Wrap</button>
+        </div>
+      </div>
+
+      <div class="opt-group">
+        <span class="opt-label">SPEED</span>
+        <div class="seg" id="speed-group">
+          <button data-speed="slow">Slow</button>
+          <button data-speed="normal" class="active">Normal</button>
+          <button data-speed="fast">Fast</button>
+        </div>
+      </div>
+
+      <div class="opt-group">
+        <span class="opt-label">PLAYER</span>
+        <div class="seg">
+          <button id="ai-btn">🤖 AI Autopilot: OFF</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="pause-btn" class="btn ghost">⏸ Pause (Space)</button>
+      <button id="restart-btn" class="btn">↻ RESTART</button>
+    </div>
+
+    <!-- On-screen D-pad (shown on touch screens only) -->
+    <div id="pad" class="pad">
+      <button data-dir="up" class="up">▲</button>
+      <button data-dir="left" class="left">◀</button>
+      <button data-dir="right" class="right">▶</button>
+      <button data-dir="down" class="down">▼</button>
+    </div>
+
+    <details class="how">
+      <summary>🧠 How does the AI Autopilot work?</summary>
+      <p>
+        The AI uses <b>Breadth-First Search (BFS)</b>, a pathfinding
+        algorithm. Every move it looks at the grid like a map, spreads
+        outwards from the snake's head one step at a time and finds the
+        <b>shortest safe path</b> to the food. Before it commits, it
+        checks that after eating there is still a way to reach its own
+        tail, so it never traps itself. If there is no safe path to the
+        food, it follows its tail or picks the move with the most open
+        space.
+      </p>
+    </details>
+  </main>
+
+  <script src="snake.js"></script>
+</body>
+</html>

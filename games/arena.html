@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D AI Arena</title>
+  <link rel="stylesheet" href="arena.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div id="game-container"></div>
+  <div id="damage-flash"></div>
+
+  <!-- In-game interface -->
+  <div id="crosshair" class="game-ui"></div>
+  <div id="hitmarker" class="game-ui"></div>
+
+  <div id="wave-info" class="game-ui">
+    <div id="wave-label">WAVE 1</div>
+    <div id="enemy-label">DRONES: 0</div>
+  </div>
+
+  <div id="squad-alert" class="game-ui"></div>
+
+  <div id="wave-banner" class="game-ui">
+    <div id="banner-title"></div>
+    <div id="banner-sub"></div>
+  </div>
+
+  <div id="hud" class="game-ui">
+    <div id="health-box">
+      <div class="hud-label">HEALTH</div>
+      <div id="health-bar">
+        <div id="health-fill"></div>
+      </div>
+      <div id="health-text">100</div>
+    </div>
+
+    <div id="score-box">
+      SCORE <span id="score">0</span>
+    </div>
+
+    <div id="ammo-box">
+      <span id="ammo">30 / 30</span>
+    </div>
+  </div>
+
+  <div id="reload-msg" class="game-ui">RELOADING...</div>
+
+  <!-- Start screen -->
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <h1>3D AI <span>ARENA</span></h1>
+      <p class="subtitle">Survive waves of AI-controlled drones</p>
+      <p class="best-line">
+        Best score: <span id="best-start">0</span>
+      </p>
+
+      <ul class="controls">
+        <li><b>W A S D</b> Move</li>
+        <li><b>Shift</b> Sprint</li>
+        <li><b>Mouse</b> Look</li>
+        <li><b>Click / Space</b> Shoot</li>
+        <li><b>R</b> Reload</li>
+        <li><b>Esc</b> Pause</li>
+        <li><b>T</b> AI Assistant</li>
+      </ul>
+
+      <!-- NEW: Side-by-side Play Arena and War Mode buttons -->
+      <div style="margin-bottom: 16px;">
+        <button id="play-btn" class="btn">▶ PLAY ARENA</button>
+        <a class="btn" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7); margin-left: 10px;" href="war.html">⚔ WAR MODE</a>
+      </div>
+
+      <div class="btn-row">
+        <button id="start-settings-btn" class="btn ghost">
+          ⚙ Settings
+        </button>
+        <a class="btn ghost" href="../index.html">
+          ← Back to Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause screen -->
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>PAUSED</h2>
+
+      <button id="resume-btn" class="btn">▶ RESUME</button>
+
+      <div class="btn-row">
+        <button id="pause-settings-btn" class="btn ghost">
+          ⚙ Settings
+        </button>
+        <button id="quit-btn" class="btn ghost">
+          Quit to Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings screen -->
+  <div id="settings-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>SETTINGS</h2>
+
+      <div class="setting-row">
+        <label for="vol-master">Master Volume</label>
+        <input
+          type="range"
+          id="vol-master"
+          min="0"
+          max="100"
+          step="1"
+        >
+        <span id="vol-master-val">80%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="vol-sfx">Effects Volume</label>
+        <input
+          type="range"
+          id="vol-sfx"
+          min="0"
+          max="100"
+          step="1"
+        >
+        <span id="vol-sfx-val">80%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="vol-music">Music Volume</label>
+        <input
+          type="range"
+          id="vol-music"
+          min="0"
+          max="100"
+          step="1"
+        >
+        <span id="vol-music-val">50%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="sens">Mouse Sensitivity</label>
+        <input
+          type="range"
+          id="sens"
+          min="0.3"
+          max="2.5"
+          step="0.1"
+        >
+        <span id="sens-val">1.0x</span>
+      </div>
+
+      <div class="btn-row">
+        <button id="reset-settings-btn" class="btn ghost">
+          Reset
+        </button>
+        <button id="settings-back-btn" class="btn">
+          Back
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="gameover-screen" class="overlay hidden">
+    <div class="panel">
+      <h2 class="danger">GAME OVER</h2>
+
+      <p id="new-record" class="record hidden">
+        🏆 NEW RECORD!
+      </p>
+
+      <div class="stats">
+        <div>Score <b id="final-score">0</b></div>
+        <div>Wave reached <b id="final-wave">0</b></div>
+        <div>Best score <b id="final-best">0</b></div>
+      </div>
+
+      <button id="restart-btn" class="btn">
+        ↻ PLAY AGAIN
+      </button>
+
+      <div class="btn-row">
+        <button id="menu-btn" class="btn ghost">
+          Main Menu
+        </button>
+        <a class="btn ghost" href="../index.html">
+          ← Back to Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="arena.js"></script>
+  <script type="module" src="assistant.js"></script>
+</body>
+</html>
