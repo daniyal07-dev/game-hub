@@ -10,6 +10,15 @@ const REALISTIC = true;
 const BLOOM_ON_PHONE = false;
 const IS_PHONE = window.matchMedia('(pointer: coarse)').matches || /[?&]touch=1/.test(location.search);
 
+/* ----- GUN LOOK (change these to tune the pistol) -----
+   GUN_COLOR ideas: 0x0f0f10 black, 0x8a9096 steel, 0x3a3f35 olive */
+const FIX_GUN = true;
+const GUN_COLOR = 0x23262b;      // dark gunmetal
+const GUN_METAL = 0.7;           // lower = more plastic
+const GUN_ROUGH = 0.4;           // lower = shinier
+const MUZZLE_COLOR = 0xffd27a;   // warm orange muzzle flash
+const GUN_LIGHT_COLOR = 0xfff2e0;
+
 const TEX_DIR = '../textures/';
 const HDR_URL = '../textures/sky.hdr';
 const ADDONS = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/';
@@ -33,7 +42,8 @@ if (REALISTIC) {
 
 function takeOver(renderer) {
   const orig = renderer.render;
-  let ready = false, busy = false, composer = null, bloomOn = true, lastScan = 0, skyMat = null;
+  let ready = false, busy = false, composer = null, bloomOn = true, lastScan = 0, lastGunScan = 0, skyMat = null;
+  let gunLogged = false;
 
   function walk(o, skip, fn) {
     if (o === skip) return;
@@ -74,8 +84,65 @@ function takeOver(renderer) {
     }
   });
 
+  /* ---------- gun: dark gunmetal, no blue, orange muzzle flash ---------- */
+  function fixGun(camera) {
+    let changed = 0;
+    camera.traverse((o) => {
+      if (o === camera) return;
+
+      // blue outline lines on the gun: hide them
+      if ((o.isLine || o.isLineSegments) && !o.userData.gunFixed) {
+        o.visible = false;
+        o.userData.gunFixed = true;
+        changed++;
+        return;
+      }
+
+      // blue gun light -> warm white
+      if (o.isPointLight && !o.userData.gunFixed) {
+        o.color.setHex(GUN_LIGHT_COLOR);
+        o.userData.gunFixed = true;
+        changed++;
+        return;
+      }
+
+      if (!o.isMesh || o.userData.gunFixed) return;
+      const m = o.material;
+      if (!m || Array.isArray(m)) { o.userData.gunFixed = true; return; }
+
+      if (m.isMeshBasicMaterial) {
+        // muzzle flash / glow strip: orange
+        m.color.setHex(MUZZLE_COLOR).multiplyScalar(2);
+        m.userData.glowed = true;
+      } else {
+        // the gun body: realistic painted metal, no glow, no texture tint
+        const gm = new THREE.MeshStandardMaterial({
+          color: GUN_COLOR,
+          metalness: GUN_METAL,
+          roughness: GUN_ROUGH,
+          envMapIntensity: 0.9
+        });
+        o.material = gm;
+      }
+      o.userData.gunFixed = true;
+      changed++;
+    });
+    if (changed > 0 && !gunLogged) {
+      gunLogged = true;
+      console.log('✅ Gun recoloured (dark gunmetal, orange muzzle flash)');
+    }
+  }
+
   /* ---------- every frame ---------- */
   function frameUpdate(scene, camera) {
+    const now = performance.now();
+
+    // gun fix (a few times per second, so it also catches the gun model after it loads)
+    if (FIX_GUN && now - lastGunScan > 250) {
+      lastGunScan = now;
+      fixGun(camera);
+    }
+
     // make neon things (bullets, tracers, sparks) bright enough to glow
     scene.traverse((o) => {
       const m = o.material;
@@ -87,7 +154,6 @@ function takeOver(renderer) {
     });
 
     // shadows for props and drones (they load later)
-    const now = performance.now();
     if (now - lastScan > 500) {
       lastScan = now;
       walk(scene, camera, (o) => {
