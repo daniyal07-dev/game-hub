@@ -5,6 +5,7 @@
 //     Health refills between waves. Stages 2-5 are unchanged.
 // v5: SCOPE (hold right mouse button or F) and AIM ASSIST (press V to switch on/off).
 // v6: BOSS FIGHT button (unlocks after Stage 1 is cleared). Starts only the boss.
+// v7: TEAM MODE chooser (SOLO / DUO / SQUAD) on the start screen. Saved in the browser.
 
 import * as THREE from 'three';
 import { setupLook } from './core/look.js';
@@ -36,6 +37,19 @@ const AIM_MAX_DIST = 90;   // metres
 const BOSS_FIGHT_HP = 600;       // boss health in the Boss Fight (the real HP is this x1.5 inside enemies.js)
 const BOSS_SPAWN = { x: 0, z: -20 };   // where the boss appears (it is moved if that spot is blocked)
 const BOSS_KEY = 'warBossUnlocked';    // saved in the browser (localStorage)
+
+/* ---------- Team mode (SOLO / DUO / SQUAD) ---------- */
+const TEAM_KEY = 'warTeamMode';        // saved in the browser (localStorage)
+const TEAM_INFO = {
+  solo:  { label: 'SOLO',  hint: 'Just you against everyone. Hardest, best for lone wolves.' },
+  duo:   { label: 'DUO',   hint: 'You + Alpha (assault) and Doc (medic).' },
+  squad: { label: 'SQUAD', hint: 'You + Alpha, Bravo, Hawk (sniper) and Doc (medic).' }
+};
+let teamMode = 'squad';
+try {
+  const savedTeam = localStorage.getItem(TEAM_KEY);
+  if (TEAM_INFO[savedTeam]) teamMode = savedTeam;
+} catch (e) { /* ignore */ }
 
 /* ---------- Graphics Quality presets ---------- */
 const QUALITY = {
@@ -338,12 +352,87 @@ function renderBossButton() {
   btn.classList.toggle('locked', !ok);
   btn.textContent = ok ? '☠ BOSS FIGHT' : '🔒 BOSS FIGHT';
   if (hint) hint.textContent = ok
-    ? 'Face the boss with your squad. No waves, just the boss.'
+    ? 'Face the boss. No waves, just the boss.'
     : 'Clear Stage 1 to unlock the Boss Fight';
 }
 
 function bossIsDead() {
   return bossSpawned && !enemiesSys.list.some(e => e.alive && e.isBoss);
+}
+
+/* ---------- Team mode: apply + chooser buttons ---------- */
+function applyTeamMode(mode, save) {
+  if (!TEAM_INFO[mode]) mode = 'squad';
+  teamMode = mode;
+
+  // body classes let CSS hide the squad panel / order label / phone ORDER button in Solo
+  document.body.classList.remove('team-solo', 'team-duo', 'team-squad');
+  document.body.classList.add('team-' + mode);
+
+  document.querySelectorAll('#team-select .team-opt').forEach(b => {
+    b.classList.toggle('on', b.dataset.mode === mode);
+  });
+  const hint = document.getElementById('team-hint');
+  if (hint) hint.textContent = TEAM_INFO[mode].hint;
+
+  if (save) {
+    try { localStorage.setItem(TEAM_KEY, mode); } catch (e) { /* ignore */ }
+  }
+}
+
+function setupTeamChooser() {
+  // CSS for the chooser + the Solo hiding rules
+  if (!document.getElementById('team-style')) {
+    const st = document.createElement('style');
+    st.id = 'team-style';
+    st.textContent =
+      '#team-select{width:100%;margin:0 0 12px;text-align:center}' +
+      '#team-select .team-title{font:700 11px system-ui,Segoe UI,Arial,sans-serif;letter-spacing:3px;' +
+      'color:#9fb4c8;margin-bottom:6px}' +
+      '#team-select .team-row{display:flex;gap:8px;justify-content:center}' +
+      '#team-select .team-opt{flex:1 1 0;max-width:120px;padding:9px 6px;border-radius:8px;cursor:pointer;' +
+      'font:800 13px system-ui,Segoe UI,Arial,sans-serif;letter-spacing:2px;color:#cfe3f5;' +
+      'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.22)}' +
+      '#team-select .team-opt.on{color:#001018;background:#00f0ff;border-color:#00f0ff;' +
+      'box-shadow:0 0 14px rgba(0,240,255,0.45)}' +
+      '#team-select .team-hint{font:500 12px system-ui,Segoe UI,Arial,sans-serif;color:#9fb4c8;' +
+      'margin-top:6px;min-height:15px}' +
+      'body.team-solo #team-panel,body.team-solo #order-label,body.team-solo #t-order{display:none !important}' +
+      '@media (pointer: coarse){#team-select{margin:0 0 6px}' +
+      '#team-select .team-opt{padding:6px 4px;font-size:12px}' +
+      '#team-select .team-hint{font-size:10px;margin-top:4px}' +
+      '#team-select .team-title{font-size:10px;margin-bottom:4px}}';
+    document.head.appendChild(st);
+  }
+
+  if (!document.getElementById('team-select')) {
+    const playBtn = document.getElementById('play-btn');
+    if (playBtn && playBtn.parentNode) {
+      const row = document.createElement('div');
+      row.id = 'team-select';
+      row.innerHTML =
+        '<div class="team-title">TEAM</div>' +
+        '<div class="team-row">' +
+        '<button type="button" class="team-opt" data-mode="solo">SOLO</button>' +
+        '<button type="button" class="team-opt" data-mode="duo">DUO</button>' +
+        '<button type="button" class="team-opt" data-mode="squad">SQUAD</button>' +
+        '</div><div class="team-hint" id="team-hint"></div>';
+
+      // if DEPLOY sits inside a button row, put the chooser above that row
+      const anchor = playBtn.parentNode.classList && playBtn.parentNode.classList.contains('btn-row')
+        ? playBtn.parentNode : playBtn;
+      anchor.parentNode.insertBefore(row, anchor);
+
+      row.querySelectorAll('.team-opt').forEach(b => {
+        b.addEventListener('click', () => {
+          applyTeamMode(b.dataset.mode, true);
+          play('click');
+        });
+      });
+    }
+  }
+
+  applyTeamMode(teamMode, false);
 }
 
 /* ---------- Aim Assist: gently pulls the crosshair toward the enemy nearest to it ---------- */
@@ -405,7 +494,7 @@ function loadStage(stageId) {
   camera.rotation.set(0, player.yaw, 0);
 
   itemsSys.reset(currentMap);
-  squadSys.reset(currentMap.squadStart);
+  squadSys.reset(currentMap.squadStart, teamMode);     // SOLO = nobody, DUO = 2, SQUAD = 4
   enemiesSys.clear();
   waves.reset();
 
@@ -457,6 +546,7 @@ function loadStage(stageId) {
 function startStage(stageId, boss = false) {
   ensureAudio();
   bossMode = !!boss;
+  applyTeamMode(teamMode, false);
   loadStage(boss ? 1 : stageId);
   const realId = boss ? 1 : stageId;
   isPlaying = true;
@@ -470,7 +560,9 @@ function startStage(stageId, boss = false) {
   updateAimTag(false);
 
   if (boss) {
-    hud.showComms('The enemy commander is here. Take him down, squad!', 5000);
+    hud.showComms(squadSys.size > 0
+      ? 'The enemy commander is here. Take him down, squad!'
+      : 'The enemy commander is here. Take him down!', 5000);
   } else {
     const def = STAGE_DEFS.find(s => s.id === realId);
     if (def && def.briefing) hud.showComms(def.briefing[0], 5000);
@@ -484,10 +576,23 @@ function onStageWin() {
   stopMusic();
   play('win');
 
+  // Stars depend on the team size (Solo / Duo / Squad)
+  const teamSize = squadSys.size;
   const squadSurvisors = squadSys.list.filter(t => t.alive).length;
   let stars = 1;
-  if (squadSurvisors >= 2) stars++;
-  if (squadSurvisors === 4 && player.health > 50) stars++;
+  if (teamSize === 0) {
+    // Solo: judged on your own health
+    if (player.health > 30) stars++;
+    if (player.health > 60) stars++;
+  } else if (teamSize === 2) {
+    // Duo: both teammates alive and healthy player = 3 stars
+    if (squadSurvisors >= 1) stars++;
+    if (squadSurvisors === 2 && player.health > 50) stars++;
+  } else {
+    // Squad (original rule)
+    if (squadSurvisors >= 2) stars++;
+    if (squadSurvisors === 4 && player.health > 50) stars++;
+  }
 
   if (!bossMode) {
     // normal stage: save progress
@@ -517,7 +622,7 @@ function onStageWin() {
   if (resKills) resKills.textContent = totalKills;
 
   const resSquad = document.getElementById('result-squad');
-  if (resSquad) resSquad.textContent = squadSurvisors + ' / 4';
+  if (resSquad) resSquad.textContent = teamSize === 0 ? 'Solo' : squadSurvisors + ' / ' + teamSize;
 
   const resScore = document.getElementById('result-score');
   if (resScore) resScore.textContent = (stars * 1000 + totalKills * 100 - Math.floor(stageTime) * 5);
@@ -765,6 +870,7 @@ function setupSettingsExtras() {
 function setupUI() {
   renderStageCards();
   renderBossButton();
+  setupTeamChooser();
 
   document.getElementById('play-btn')?.addEventListener('click', () => startStage(currentStageId, false));
 

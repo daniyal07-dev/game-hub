@@ -2,6 +2,7 @@
 // Handles HUD elements, Radar minimap, NOVA comms messages,
 // stage objectives (beacon, generators, boss), wave manager and results/unlock tracking.
 // v2: wave manager for Stage 1 (4 waves + boss), weapon-name label fix, wave banner.
+// v3: squad panel rows now match the right teammate (Solo / Duo / Squad), unused rows hidden.
 
 import * as THREE from 'three';
 import map1 from './maps/map1.js';
@@ -128,6 +129,27 @@ export function createRadar(canvas) {
 }
 
 /* ---------- Comms / Objective / UI Handler ---------- */
+
+// The 4 fixed rows in war.html are in this order: tm0 Alpha, tm1 Bravo, tm2 Hawk, tm3 Doc
+const ROW_ORDER = ['alpha', 'bravo', 'hawk', 'doc'];
+// Used only if a teammate object has no readable name field:
+const DUO_ROWS = [0, 3];   // Alpha, Doc
+
+// Works out which HTML row (0..3) belongs to a teammate
+function rowIndexFor(tm, listIndex, listLength) {
+  const fields = [tm.id, tm.role, tm.key, tm.type, tm.name, tm.callsign, tm.label];
+  for (const f of fields) {
+    if (typeof f !== 'string') continue;
+    const s = f.toLowerCase();
+    for (let r = 0; r < ROW_ORDER.length; r++) {
+      if (s === ROW_ORDER[r] || s.indexOf(ROW_ORDER[r]) !== -1) return r;
+    }
+  }
+  // Fallback by team size
+  if (listLength === 2) return DUO_ROWS[listIndex] !== undefined ? DUO_ROWS[listIndex] : listIndex;
+  return listIndex;
+}
+
 export function createHud() {
   const elHealthFill = document.getElementById('health-fill');
   const elHealthText = document.getElementById('health-text');
@@ -232,10 +254,17 @@ export function createHud() {
         }
       }
 
-      // Squad Health Rows
-      squad.list.forEach((tm, i) => {
-        const row = document.getElementById('tm' + i);
+      // Squad Health Rows (matched by teammate name, unused rows hidden)
+      const list = squad.list || [];
+      const used = [false, false, false, false];
+
+      list.forEach((tm, i) => {
+        const r = rowIndexFor(tm, i, list.length);
+        if (r < 0 || r > 3) return;
+        used[r] = true;
+        const row = document.getElementById('tm' + r);
         if (!row) return;
+        row.style.display = '';
         const fill = row.querySelector('.team-fill');
         if (!fill) return;
 
@@ -248,6 +277,12 @@ export function createHud() {
           row.className = frac < 0.3 ? 'team-row low' : 'team-row';
         }
       });
+
+      for (let r = 0; r < 4; r++) {
+        if (used[r]) continue;
+        const row = document.getElementById('tm' + r);
+        if (row) row.style.display = 'none';
+      }
     }
   };
 }

@@ -1,7 +1,8 @@
 /* =====================================================
    NOVA - the T-key AI assistant (offline, rule-based)
    Works in Arena Mode, War Mode and on the Game Hub.
-   Press T to open / close.
+   Press T to open / close (on phones: tap the NOVA badge on menus / pause screen).
+   v2: Solo / Duo / Squad, phone touch controls, phone-friendly badge.
    ===================================================== */
 
 const BOT_NAME = 'NOVA';
@@ -10,11 +11,20 @@ const BOT_NAME = 'NOVA';
 const FILE = (location.pathname.split('/').pop() || '').toLowerCase();
 const MODE = FILE.startsWith('war') ? 'war' : (FILE.startsWith('arena') ? 'arena' : 'hub');
 
+/* ---------- phone / touch screen? ---------- */
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+  /[?&]touch=1/.test(location.search);
+
 // where the small "T AI Assistant" badge sits on each page (change here if it overlaps something)
 const BADGE_POS = {
   arena: 'top:16px;left:16px;',
   war: 'top:50%;left:16px;',
   hub: 'bottom:20px;right:20px;'
+};
+const BADGE_POS_TOUCH = {
+  arena: 'top:8px;left:8px;',
+  war: 'top:8px;left:8px;',
+  hub: 'bottom:12px;right:12px;'
 };
 
 /* =====================================================
@@ -129,6 +139,19 @@ const CSS = `
   font-size: 16px; color: #fff; background: linear-gradient(90deg, #00b8d4, #7b2ff7);
 }
 #nova-hint { padding: 0 14px 10px; font-size: 11px; color: #789; text-align: center; }
+
+/* phones: smaller badge and a panel that fits a landscape screen */
+@media (pointer: coarse) {
+  #nova-badge { padding: 5px 9px; font-size: 11px; }
+  #nova-panel { right: 8px; bottom: 8px; width: min(440px, 96vw); height: min(520px, 94vh); border-radius: 12px; }
+  #nova-header { padding: 8px 12px; }
+  #nova-avatar { width: 30px; height: 30px; font-size: 16px; }
+  #nova-title b { font-size: 14px; }
+  .nova-msg { font-size: 13px; padding: 7px 10px; }
+  #nova-form { padding: 8px 10px; }
+  #nova-input { font-size: 16px; padding: 8px 10px; }
+  #nova-hint { display: none; }
+}
 `;
 
 const styleEl = document.createElement('style');
@@ -142,8 +165,8 @@ const SUBTITLE = { arena: 'Arena Mode', war: 'War Mode', hub: 'Game Hub' }[MODE]
 
 const badge = document.createElement('div');
 badge.id = 'nova-badge';
-badge.style.cssText = BADGE_POS[MODE];
-badge.innerHTML = '<b>T</b>AI Assistant';
+badge.style.cssText = (IS_TOUCH ? BADGE_POS_TOUCH : BADGE_POS)[MODE];
+badge.innerHTML = IS_TOUCH ? '<b>N</b>NOVA' : '<b>T</b>AI Assistant';
 document.body.appendChild(badge);
 
 const panel = document.createElement('div');
@@ -152,7 +175,7 @@ panel.innerHTML = `
   <div id="nova-header">
     <div id="nova-avatar">N</div>
     <div id="nova-title"><b>${BOT_NAME}</b><span><i></i>AI Assistant · ${SUBTITLE} · offline</span></div>
-    <button id="nova-close" title="Close (T)">✕</button>
+    <button id="nova-close" title="Close">✕</button>
   </div>
   <div id="nova-msgs"></div>
   <div id="nova-chips"></div>
@@ -160,7 +183,7 @@ panel.innerHTML = `
     <input id="nova-input" type="text" maxlength="200" placeholder="Ask me anything about NOVA STRIKE 3D...">
     <button type="submit" id="nova-send">➤</button>
   </form>
-  <div id="nova-hint">Press T to open / close · Esc to close</div>
+  <div id="nova-hint">${IS_TOUCH ? 'Tap ✕ to close' : 'Press T to open / close · Esc to close'}</div>
 `;
 document.body.appendChild(panel);
 
@@ -194,8 +217,8 @@ function inMatch() {
 
 const DEFAULT_CHIPS_BY_MODE = {
   arena: ['How do I play?', 'Give me a tip', 'Enemy types', 'My status', 'Who made this?'],
-  war: ['How do I play?', 'Squad orders', 'Enemy types', 'The boss fight', 'My status'],
-  hub: ['What is NOVA STRIKE 3D?', 'Game modes', 'How does NOVA work?', 'Who made this?']
+  war: ['How do I play?', 'Squad orders', 'Solo, Duo or Squad?', 'The boss fight', 'My status'],
+  hub: ['What is NOVA STRIKE 3D?', 'Game modes', 'Does it work on phones?', 'Who made this?']
 };
 const DEFAULT_CHIPS = DEFAULT_CHIPS_BY_MODE[MODE];
 
@@ -203,27 +226,29 @@ const TIPS_ARENA = [
   'Keep moving! Standing still makes you an easy target. Strafe left and right.',
   'Hide behind a pillar: they block drone bullets completely.',
   'Drones glow brighter just before they fire. That is your cue to dodge.',
-  'Reload between squads, not during a fight. Press R when the field is clear.',
-  'Sprint with Shift to dodge a volley, then stop and aim.',
+  'Reload between squads, not during a fight. Reload when the field is clear.',
+  'Sprint to dodge a volley, then stop and aim.',
   'Focus one drone at a time. Three hits and it is gone, so finish what you start.',
   'Clearing a wave heals you by 25, so survive to the end of the wave.',
-  'Hold the right mouse button (or F) to zoom in for far drones. Press V if you want aim assist.',
+  'Zoom in with the scope for far drones. Aim assist helps if you want it.',
   'Check the alert at the top: it tells you where the next squad is coming from.'
 ];
 
 const TIPS_WAR = [
-  'Use your squad! Press X to make them hold a position, then fight from behind cover.',
-  'Press C to send the squad at the enemy you are aiming at. Focus fire wins fights.',
+  'Use your squad! Make them hold a position (X), then fight from behind cover.',
+  'Send the squad at the enemy you are aiming at (C). Focus fire wins fights.',
   'Hawk is a sniper. Keep him alive and he will clear far enemies for you.',
   'A red laser means an enemy sniper is aiming at you. Break line of sight or move now!',
   'Heavy troopers are tough but fight at close range. Keep your distance and use the rifle.',
-  'Press G to throw a grenade. Use them on groups, not single enemies: they hit a wide area.',
-  'Switch weapons with 1, 2 and 3: pistol for precision, rifle for most fights, shotgun up close.',
+  'Throw grenades (G, or the 💣 button on phones) at groups, not single enemies: they hit a wide area.',
+  'Pistol for precision, rifle for most fights, shotgun up close.',
   'Between waves your health and ammo are restored, so spend everything you have.',
   'Take cover behind the sandbags and crates at your camp, then lean out to shoot.',
-  'Hold the right mouse button (or F) to scope in for far targets. You walk slower while scoped.',
-  'The boss hits hard. Keep moving, use cover and let the squad share the damage.',
-  'In the Boss Fight, press C to make your whole squad shoot the boss, and throw grenades with G.'
+  'Scope in for far targets. You walk slower while scoped.',
+  'The boss hits hard. Keep moving, use cover and let your team share the damage.',
+  'In the Boss Fight, make your team shoot the boss and throw grenades at it.',
+  'Playing Solo is hard. Try Duo: Alpha shoots and Doc heals you.',
+  'Pick SOLO, DUO or SQUAD on the start screen before you press DEPLOY.'
 ];
 
 const TIPS_HUB = TIPS_ARENA.concat(TIPS_WAR);
@@ -239,7 +264,7 @@ function nextTip() {
 
 function statusReply() {
   if (MODE === 'hub') {
-    return 'You are on the Game Hub. Pick Arena Mode or War Mode, start a match, then press T and ask for "My status" to see your live stats.';
+    return 'You are on the Game Hub. Pick Arena Mode or War Mode, start a match, then open me from the pause screen and ask for "My status" to see your live stats.';
   }
   if (!inMatch()) {
     return 'No match is running right now. Press PLAY and I will track your stats live!';
@@ -259,6 +284,7 @@ function statusReply() {
   }
   // war mode: read whatever the HUD shows
   const line = (label, id) => (txt(id) ? '• ' + label + ': ' + txt(id) + '\n' : '');
+  const solo = document.body.classList.contains('team-solo');
   return '📊 LIVE STATUS\n' +
     line('Wave', 'wave-label') +
     line('Enemies', 'enemy-label') +
@@ -266,14 +292,15 @@ function statusReply() {
     line('Weapon', 'weapon-name') +
     line('Ammo', 'ammo') +
     line('Grenades', 'grenade-count') +
-    '\nTip: Z / X / C give orders to your squad, and G throws a grenade.';
+    (solo ? '\nYou are playing SOLO. Grenades and cover are your best friends.'
+          : '\nTip: give your team orders (Follow / Hold / Attack) and throw grenades at groups.');
 }
 
 function tipReply() {
   if ((MODE === 'arena' || MODE === 'war') && inMatch()) {
     const hp = parseInt(txt('health-text'), 10) || 100;
     if (hp <= 30 && MODE === 'arena') return '💡 Your health is low! Break line of sight behind a pillar, then pick off drones one by one to finish the wave and heal +25.';
-    if (hp <= 30 && MODE === 'war') return '💡 Your health is low! Get behind cover and let your squad hold the line. Health is fully restored between waves.';
+    if (hp <= 30 && MODE === 'war') return '💡 Your health is low! Get behind cover and hold on. Health is fully restored between waves.';
   }
   return '💡 TIP\n' + nextTip();
 }
@@ -312,7 +339,7 @@ const INTENTS = [
   { id: 'boss',
     keys: ['boss', 'bosses', 'final boss', 'boss fight'],
     reply: byMode({
-      war: '👹 THE BOSS\nThe boss is a giant armoured mech with a lot of HP and long-range fire. You meet it in two ways:\n• Stage 1, wave 4: it arrives with escorts\n• BOSS FIGHT button: unlocked after you clear Stage 1. Just you, your squad and the boss.\n\nIt fights in 3 phases: rifle fire first, then artillery barrages, then it ENRAGES at low HP.\n• Keep moving and never stand in the open\n• Use cover, then lean out to shoot\n• Press C so your squad focuses the boss\n• Grenades (G) and the rifle do the most damage',
+      war: '👹 THE BOSS\nThe boss is a giant armoured mech with a lot of HP and long-range fire. You meet it in two ways:\n• Stage 1, wave 4: it arrives with escorts\n• BOSS FIGHT button: unlocked after you clear Stage 1. Just you (and your team, if you picked Duo or Squad) against the boss.\n\nIt fights in 3 phases: rifle fire first, then artillery barrages, then it ENRAGES at low HP.\n• Keep moving and never stand in the open\n• Use cover, then lean out to shoot\n• Order your team to focus the boss\n• Grenades and the rifle do the most damage',
       arena: 'Arena Mode has no boss. It is an endless survival: waves just keep getting harder. The boss is in War Mode.',
       hub: '👹 THE BOSS\nThe boss is in War Mode: a giant mech that fights in 3 phases (rifle fire, artillery, enrage). It appears at the end of Stage 1, and clearing Stage 1 also unlocks a separate BOSS FIGHT button on the War Mode start screen.'
     }),
@@ -329,13 +356,13 @@ const INTENTS = [
   /* ----- what is the game ----- */
   { id: 'game',
     keys: ['nova strike', 'nova strike 3d', 'what is nova strike 3d', 'what is nova strike', 'the game', 'this game', 'flagship', 'tactical ai combat'],
-    reply: '🎮 NOVA STRIKE 3D\nTactical AI Combat: a real 3D shooter that runs in your browser. It is the flagship game of Game Hub and has three modes:\n• Arena Mode: survive waves of AI drones\n• War Mode: command a 4-man AI squad in a campaign\n• Multiplayer: real online players (in development)',
+    reply: '🎮 NOVA STRIKE 3D\nTactical AI Combat: a real 3D shooter that runs in your browser, on PC and on phones. It is the flagship game of Game Hub and has three modes:\n• Arena Mode: survive waves of AI drones\n• War Mode: a campaign where you play Solo, Duo or with a full 4-man AI squad\n• Multiplayer: real online players (in development)',
     chips: ['Game modes', 'How do I play?', 'Who made this?'] },
 
   { id: 'modes',
     keys: ['game modes', 'modes', 'mode', 'three modes', 'arena mode', 'war mode', 'difference'],
-    reply: '🗺 THE THREE MODES\n• ARENA MODE: a neon arena. Survive endless waves of AI drones and chase a high score.\n• WAR MODE: a realistic battlefield. Lead a squad (Alpha, Bravo, Hawk, Doc) against ground and air enemies. Stage 1 has 4 waves and a boss, and a separate Boss Fight unlocks after it.\n• MULTIPLAYER: 1v1 up to 4v4 with real players. It is in development.',
-    chips: ['Squad orders', 'Multiplayer?', 'How do waves work?'] },
+    reply: '🗺 THE THREE MODES\n• ARENA MODE: a neon arena. Survive endless waves of AI drones and chase a high score.\n• WAR MODE: a realistic battlefield. Go in SOLO, as a DUO (Alpha + Doc) or lead the full SQUAD (Alpha, Bravo, Hawk, Doc) against ground and air enemies. Stage 1 has 4 waves and a boss, and a separate Boss Fight unlocks after it.\n• MULTIPLAYER: 1v1 up to 4v4 with real players. It is in development.\n\nArena and War both work on phones too.',
+    chips: ['Solo, Duo or Squad?', 'Multiplayer?', 'Does it work on phones?'] },
 
   { id: 'multiplayer',
     keys: ['multiplayer', 'multi player', 'online', 'online players', '1v1', '2v2', '3v3', '4v4', 'real players', 'play with friends', 'friends'],
@@ -344,7 +371,7 @@ const INTENTS = [
 
   { id: 'nova',
     keys: ['nova', 'how does nova work', 'who is nova', 'assistant', 'chatbot', 'chat bot', 't key'],
-    reply: '🤖 ABOUT NOVA\nI am NOVA, the AI assistant of NOVA STRIKE 3D. Press T on any page to talk to me.\nI am rule-based: I match your words against a knowledge base (and forgive small typos), so I work fully offline and answer instantly. In a match I can also read your live stats.',
+    reply: '🤖 ABOUT NOVA\nI am NOVA, the AI assistant of NOVA STRIKE 3D. On PC press T to talk to me; on phones tap the NOVA badge on the menus or the pause screen.\nI am rule-based: I match your words against a knowledge base (and forgive small typos), so I work fully offline and answer instantly. In a match I can also read your live stats.',
     more: 'My matching works in 3 steps: (1) clean up your sentence, (2) score every topic by how many of its keywords appear, allowing small typos, (3) answer with the best-scoring topic. If nothing matches, I suggest topics instead of guessing. Because no server or paid API is used, I am free and private.',
     chips: ['Tell me more', 'What is NOVA STRIKE 3D?', 'Does it work offline?'] },
 
@@ -352,23 +379,23 @@ const INTENTS = [
   { id: 'controls',
     keys: ['controls', 'control', 'keys', 'keyboard', 'how to play', 'how do i play', 'move*', 'walk*', 'sprint*', 'run', 'shoot*', 'fire', 'reload*', 'aiming', 'how do i'],
     reply: byMode({
-      arena: '🎮 CONTROLS (ARENA)\n• W A S D: move\n• Shift: sprint\n• Mouse: look around\n• Click or Space: shoot\n• R: reload\n• Right mouse / F: scope (zoom)\n• V: aim assist on / off\n• Arrow keys: turn the camera\n• Esc: pause\n• T: talk to me',
-      war: '🎮 CONTROLS (WAR)\n• W A S D: move\n• Shift: sprint\n• Mouse: look around\n• Click or Space: shoot\n• R: reload\n• 1 2 3: switch weapon (pistol, rifle, shotgun)\n• G: throw a grenade\n• Z / X / C: squad orders (Follow / Hold / Attack my target)\n• Right mouse / F: scope (zoom)\n• V: aim assist on / off\n• Arrow keys: turn the camera\n• [ and ]: sensitivity down / up\n• B: bloom on / off\n• Esc: pause\n• T: talk to me',
-      hub: '🎮 CONTROLS\nBoth modes use W A S D to move, Shift to sprint, the mouse to look, click or Space to shoot, R to reload, right mouse or F to scope, V for aim assist and Esc to pause. War Mode adds 1 2 3 for weapons, G for grenades and Z / X / C squad orders. Start a mode and press T for its full list!'
+      arena: '🎮 CONTROLS (ARENA)\n• W A S D: move\n• Shift: sprint\n• Mouse: look around\n• Click or Space: shoot\n• R: reload\n• Right mouse / F: scope (zoom)\n• V: aim assist on / off\n• Arrow keys: turn the camera\n• Esc: pause\n• T: talk to me\n\n📱 ON A PHONE: left thumb = move (push far to sprint), swipe the right side = look, FIRE = shoot, ⏸ = pause.',
+      war: '🎮 CONTROLS (WAR)\n• W A S D: move\n• Shift: sprint\n• Mouse: look around\n• Click or Space: shoot\n• R: reload\n• 1 2 3: switch weapon (pistol, rifle, shotgun)\n• G: throw a grenade\n• Z / X / C: team orders (Follow / Hold / Attack my target)\n• Right mouse / F: scope (zoom)\n• V: aim assist on / off\n• Arrow keys: turn the camera\n• [ and ]: sensitivity down / up\n• B: bloom on / off\n• Esc: pause\n• T: talk to me\n\n📱 ON A PHONE: left thumb = move (push far to sprint), swipe the right side = look, FIRE = shoot, GUN = change weapon, ORDER = team command, 💣 = grenade, ⏸ = pause. Reload and aim assist are automatic.',
+      hub: '🎮 CONTROLS\nOn PC: W A S D to move, Shift to sprint, the mouse to look, click or Space to shoot, R to reload, right mouse or F to scope, V for aim assist and Esc to pause. War Mode adds 1 2 3 for weapons, G for grenades and Z / X / C team orders.\nOn a phone: touch controls appear automatically. Start a mode and open me from the pause screen for the full list!'
     }),
     chips: ['Scope and aim assist', 'What is the goal?', 'Give me a tip'] },
 
   { id: 'scope',
     keys: ['scope', 'zoom', 'aim assist', 'assist', 'auto aim', 'autoaim', 'right click', 'right mouse', 'sniper scope'],
-    reply: '🎯 SCOPE + AIM ASSIST\n• SCOPE: hold the right mouse button (or F) to zoom in. The view narrows, your aim slows down for precision, and you walk slower.\n• AIM ASSIST: press V to turn it on or off (off by default). While you fire, it gently pulls your crosshair toward the nearest enemy. It is an optional accessibility feature, like in console shooters.',
+    reply: '🎯 SCOPE + AIM ASSIST\n• SCOPE: hold the right mouse button (or F) to zoom in. The view narrows, your aim slows down for precision, and you walk slower.\n• AIM ASSIST: press V to turn it on or off (off by default on PC, on by default on phones). While you fire, it gently pulls your crosshair toward the nearest enemy. It is an optional accessibility feature, like in console shooters.',
     chips: ['How do I play?', 'Open settings?'] },
 
   { id: 'goal',
     keys: ['goal', 'objective', 'how to win', 'win', 'what do i do', 'purpose', 'what is the aim'],
     reply: byMode({
       arena: '🎯 GOAL\nSurvive as many waves of AI drones as you can. Shoot the drones, dodge their bullets and chase a new best score. There is no final level: the waves keep getting harder!',
-      war: '🎯 GOAL\nClear every wave of Stage 1 and beat the boss. Lead your squad, use cover and finish the stage to unlock the next one and the Boss Fight.',
-      hub: '🎯 GOAL\nArena Mode: survive endless drone waves for a high score. War Mode: clear the waves and beat the boss with your squad. Pick one and press PLAY!'
+      war: '🎯 GOAL\nClear every wave of Stage 1 and beat the boss. Choose SOLO, DUO or SQUAD, use cover and finish the stage to unlock the next one and the Boss Fight.',
+      hub: '🎯 GOAL\nArena Mode: survive endless drone waves for a high score. War Mode: clear the waves and beat the boss, alone or with your team. Pick one and press PLAY!'
     }),
     chips: ['How do waves work?', 'Game modes'] },
 
@@ -402,30 +429,39 @@ const INTENTS = [
     chips: ['The boss fight', 'Game modes'] },
 
   { id: 'scoring',
-    keys: ['scoring', 'score', 'points', 'high score', 'best score', 'record', 'leaderboard'],
+    keys: ['scoring', 'score', 'points', 'high score', 'best score', 'record', 'leaderboard', 'stars', 'star'],
     reply: byMode({
       arena: '🏆 SCORING\n• +100 for every drone destroyed\n• +250 × wave number when you clear a wave\n\nYour best score is saved in this browser, so it is still here after a refresh.',
-      all: '🏆 SCORING\nArena Mode has a score: +100 per drone and +250 × wave for clearing a wave. Your best is saved in the browser. In War Mode the aim is to clear the stage.'
+      war: '🏆 SCORING (WAR)\nYou earn 1 to 3 stars when you clear a stage.\n• SOLO: more stars for finishing with high health\n• DUO: keep Alpha and Doc alive\n• SQUAD: keep your squad alive\nKills and speed add to your score.',
+      all: '🏆 SCORING\nArena Mode has a score: +100 per drone and +250 × wave for clearing a wave. Your best is saved in the browser. In War Mode the aim is to clear the stage and earn stars.'
     }),
     chips: ['My status', 'Give me a tip'] },
 
-  /* ----- squad (War Mode) ----- */
+  /* ----- team (War Mode) ----- */
+  { id: 'teamchoice',
+    keys: ['solo', 'duo', 'alone', 'by myself', 'single player', 'singleplayer', 'one player', 'team mode', 'team size', 'solo duo squad', 'solo, duo or squad'],
+    reply: byMode({
+      war: '👥 TEAM MODE\nOn the War Mode start screen choose before you press DEPLOY:\n• SOLO: just you. No teammates, the hardest way to play.\n• DUO: you + Alpha (assault) and Doc (medic who heals you).\n• SQUAD: you + Alpha, Bravo, Hawk (sniper) and Doc.\nYour choice is saved. The ORDER button and the team panel are hidden in Solo.',
+      all: '👥 TEAM MODE\nIn War Mode you choose SOLO (just you), DUO (Alpha + Doc) or SQUAD (Alpha, Bravo, Hawk and Doc) on the start screen. It works on PC and on phones.'
+    }),
+    chips: ['Squad orders', 'Give me a tip', 'Does it work on phones?'] },
+
   { id: 'squad',
     keys: ['squad*', 'team', 'teammate*', 'teammates', 'squadmate*', 'orders', 'order*', 'alpha', 'bravo', 'hawk', 'doc', 'medic', 'follow', 'command*'],
     reply: byMode({
-      war: '🪖 YOUR SQUAD\n• Alpha and Bravo: assault soldiers for medium range\n• Hawk: the sniper, shoots from very far away\n• Doc: the medic, supports the squad\n\nORDERS:\n• Z: Follow me\n• X: Hold position\n• C: Attack my target (aim at an enemy first)\nThey only shoot what they can see, and each has a firing range.',
-      arena: 'Arena Mode is a solo fight. The squad (Alpha, Bravo, Hawk and Doc) fights next to you in War Mode, where Z / X / C give them orders.',
-      hub: '🪖 THE SQUAD\nIn War Mode you lead a 4-man AI squad: Alpha, Bravo, Hawk (sniper) and Doc (medic). Press Z to follow, X to hold and C to attack your target.'
+      war: '🪖 YOUR TEAM\n• Alpha and Bravo: assault soldiers for medium range\n• Hawk: the sniper, shoots from very far away\n• Doc: the medic, heals you and the team\n\nSolo = nobody, Duo = Alpha + Doc, Squad = all four.\n\nORDERS (Duo and Squad):\n• Z / FOLLOW: stay with me\n• X / HOLD: hold position\n• C / ATTACK: attack my target (aim at an enemy first)\nOn a phone tap the ORDER button to cycle them. They only shoot what they can see, and each has a firing range.',
+      arena: 'Arena Mode is a solo fight. In War Mode you can go Solo, Duo or with the full squad (Alpha, Bravo, Hawk and Doc), and give them orders.',
+      hub: '🪖 THE TEAM\nIn War Mode you pick SOLO, DUO or SQUAD. The full squad has Alpha, Bravo, Hawk (sniper) and Doc (medic), and you give them orders: Follow, Hold or Attack.'
     }),
-    more: 'Squad AI: each soldier has a role, a firing range and its own behaviour. Hawk the sniper stops to shoot from far away when an enemy is visible, while Alpha and Bravo close in to about 70% of their range when you order an attack. They also catch up with you if they fall behind.',
-    chips: ['Tell me more', 'Enemy types', 'Give me a tip'] },
+    more: 'Squad AI: each soldier has a role, a firing range and its own behaviour. Hawk the sniper stops to shoot from far away when an enemy is visible, while Alpha and Bravo close in to about 70% of their range when you order an attack. Doc runs to whoever is hurt and heals them. They also catch up with you if they fall behind.',
+    chips: ['Tell me more', 'Solo, Duo or Squad?', 'Give me a tip'] },
 
   { id: 'weapons',
     keys: ['weapon*', 'gun*', 'pistol', 'rifle', 'shotgun', 'grenade*', 'ammo', 'magazine', 'explosive*', 'bomb*'],
     reply: byMode({
-      war: '🔫 WEAPONS (WAR)\nSwitch with 1, 2 and 3:\n• 1 Pistol: strong single shots\n• 2 Rifle: fast automatic fire (the best all-rounder)\n• 3 Shotgun: heavy close-range damage\n• G Grenade: big area damage, great against groups (you carry a few and can find more at the camp)\nAmmo and health are restored between waves, and there are pickups at your camp.',
-      arena: '🔫 WEAPON (ARENA)\nYou have one energy rifle with a 30-round magazine. Press R to reload. Reload between squads, not during a fight.',
-      hub: '🔫 WEAPONS\nArena Mode gives you one energy rifle. War Mode has a pistol, rifle, shotgun (keys 1 2 3) and grenades (key G).'
+      war: '🔫 WEAPONS (WAR)\n• Pistol: strong single shots\n• Rifle: fast automatic fire (the best all-rounder)\n• Shotgun: heavy close-range damage\n• Grenade: big area damage, great against groups (you carry a few and get more between waves)\nPC: keys 1 2 3 and G. Phone: the GUN button cycles weapons and 💣 throws a grenade.\nAmmo and health are restored between waves, and reloading is automatic when you run dry.',
+      arena: '🔫 WEAPON (ARENA)\nYou have one energy rifle with a 30-round magazine. Reload between squads, not during a fight.',
+      hub: '🔫 WEAPONS\nArena Mode gives you one energy rifle. War Mode has a pistol, rifle, shotgun and grenades.'
     }),
     chips: ['How do I play?', 'Give me a tip'] },
 
@@ -433,7 +469,7 @@ const INTENTS = [
     keys: ['health', 'heal*', 'hp', 'damage', 'die', 'dying', 'dead', 'lives', 'life'],
     reply: byMode({
       arena: '❤ HEALTH\nYou start with 100 HP. Each drone bullet costs 10. Clearing a wave restores +25 (max 100). The bar turns red under 30, so hide behind a pillar and recover.',
-      war: '❤ HEALTH (WAR)\nAvoid open ground and fight from cover. Your health and ammo are fully restored between waves, and there are health pickups at your camp. Doc, your medic, supports the squad.',
+      war: '❤ HEALTH (WAR)\nAvoid open ground and fight from cover. Your health and ammo are fully restored between waves. If Doc is on your team he heals you when you are hurt. In Solo there is no medic, so be careful.',
       hub: '❤ HEALTH\nArena Mode: 100 HP, +25 for every cleared wave. War Mode: health and ammo are restored between waves.'
     }),
     chips: ['Give me a tip', 'Where can I take cover?'] },
@@ -450,20 +486,20 @@ const INTENTS = [
   /* ----- settings, audio, tech ----- */
   { id: 'settings',
     keys: ['settings', 'setting', 'volume', 'sensitivity', 'sens', 'mute', 'quiet', 'louder', 'options', 'graphics', 'quality', 'bloom', 'resolution'],
-    reply: '⚙ SETTINGS\nOpen Settings from the Start screen or the Pause screen:\n• Master, Effects and Music volume\n• Mouse sensitivity from 1 to 30 (10 is normal; in War Mode you can also press [ and ])\n• Graphics Quality: High, Medium or Low for slower computers\nEverything is saved automatically.',
+    reply: '⚙ SETTINGS\nOpen Settings from the Start screen or the Pause screen:\n• Master, Effects and Music volume\n• Sensitivity from 1 to 30 (10 is normal; on PC in War Mode you can also press [ and ])\n• Graphics Quality: High, Medium or Low for slower devices. Phones use Medium automatically.\nEverything is saved automatically.',
     chips: ['Is the game laggy?', 'Pause menu'] },
 
   { id: 'music',
     keys: ['music', 'sound*', 'audio', 'song*', 'soundtrack', 'beat'],
     reply: byMode({
-      arena: '🎵 MUSIC & SOUND\nEvery sound and the synthwave music are generated live by code using the Web Audio API, so there are no audio files and no copyright issues. The music builds up as you progress: bass and pads first, drums from wave 2, then a lead arpeggio from wave 3.',
-      all: '🎵 SOUND\nSounds are generated live by code using the Web Audio API, so there are no copyright problems. You can change the volumes in Settings.'
+      arena: '🎵 MUSIC & SOUND\nMost sounds and the synthwave music are generated live by code using the Web Audio API. The music builds up as you progress: bass and pads first, drums from wave 2, then a lead arpeggio from wave 3.',
+      all: '🎵 SOUND\nSounds and music are generated live by code using the Web Audio API, with a free gunshot sample. You can change the volumes in Settings.'
     }),
     chips: ['How was this made?', 'Open settings?'] },
 
   { id: 'pause',
     keys: ['pause', 'paused', 'quit', 'exit', 'main menu', 'menu', 'leave', 'stop', 'resume'],
-    reply: '⏸ PAUSE\nPress Esc to pause. From the Pause screen you can Resume, open Settings, or Quit to the menu. Press T anytime to talk to me, and the game pauses while we chat.',
+    reply: '⏸ PAUSE\nOn PC press Esc to pause. On a phone tap the ⏸ button. From the Pause screen you can Resume, open Settings, or Quit to the menu.',
     chips: ['How do I play?', 'Give me a tip'] },
 
   { id: 'hub',
@@ -473,12 +509,12 @@ const INTENTS = [
 
   { id: 'tech',
     keys: ['how was this made', 'technology', 'technologies', 'tech', 'built with', 'made with', 'three', 'threejs', 'javascript', 'html', 'css', 'code', 'coding', 'framework*', 'engine', 'language', 'models', 'graphics engine'],
-    reply: '🛠 HOW IT IS BUILT\n• Plain HTML, CSS and JavaScript, with no framework\n• Three.js for the 3D graphics (PBR materials, shadows, bloom)\n• Free CC0 3D models and textures, loaded as glTF\n• Web Audio API for all sounds and music\n• Raycasting for shooting, Pointer Lock for mouse look\n• localStorage for your settings and best score\n\nEverything used is free and open.',
+    reply: '🛠 HOW IT IS BUILT\n• Plain HTML, CSS and JavaScript, with no framework\n• Three.js for the 3D graphics (PBR materials, shadows, bloom)\n• Free 3D models and textures, loaded as glTF\n• Web Audio API for sounds and music\n• Raycasting for shooting, Pointer Lock for mouse look, and touch controls for phones\n• localStorage for your settings and progress\n\nEverything used is free.',
     chips: ['How does the AI work?', 'Does it work offline?'] },
 
   { id: 'ai',
     keys: ['ai', 'artificial intelligence', 'intelligen*', 'smart', 'brain', 'think*', 'machine learning', 'how does ai work', 'how does the ai work'],
-    reply: '🧠 THE AI\n• Enemies: every frame they sense where you are, decide what to do (approach, retreat, take position, strafe or shoot) and act. In War Mode each type has its own role and range, and an adaptive director adjusts the difficulty.\n• Your squad: soldiers with roles that obey your Z / X / C orders.\n• Me: a rule-based assistant that matches your words against a knowledge base, so I work fully offline.',
+    reply: '🧠 THE AI\n• Enemies: every frame they sense where you are, decide what to do (approach, retreat, take position, strafe or shoot) and act. In War Mode each type has its own role and range, and an adaptive director adjusts the difficulty.\n• Your team: soldiers with roles that obey your orders.\n• Me: a rule-based assistant that matches your words against a knowledge base, so I work fully offline.',
     chips: ['How does NOVA work?', 'Enemy types'] },
 
   { id: 'offline',
@@ -487,9 +523,9 @@ const INTENTS = [
     chips: ['How was this made?'] },
 
   { id: 'mobile',
-    keys: ['mobile', 'phone', 'android', 'iphone', 'tablet', 'touch', 'touchscreen'],
-    reply: '📱 MOBILE\nThe Game Hub home page works on phones. NOVA STRIKE 3D is built for a desktop or laptop with a keyboard and mouse.',
-    chips: ['How do I play?'] },
+    keys: ['mobile', 'phone', 'phones', 'android', 'iphone', 'tablet', 'touch', 'touchscreen', 'touch controls', 'on phones', 'on phone'],
+    reply: '📱 PHONES\nYes! Arena Mode and War Mode both work on phones with on-screen touch controls:\n• Left thumb: move (push far to sprint)\n• Swipe the right side: look around\n• FIRE: shoot\n• GUN: change weapon (War)\n• ORDER: team command (War, Duo and Squad)\n• 💣: grenade (War)\n• ⏸: pause\n\nPlay in landscape. Reload and aim assist are automatic, and graphics switch to Medium so it runs smoothly.',
+    chips: ['How do I play?', 'Solo, Duo or Squad?'] },
 
   { id: 'mouse',
     keys: ['touchpad', 'trackpad', 'mouse', 'mouse not working', 'cant shoot', 'cannot shoot', 'cursor stuck', 'stuck'],
@@ -498,13 +534,13 @@ const INTENTS = [
 
   { id: 'performance',
     keys: ['lag', 'laggy', 'is the game laggy', 'slow', 'fps', 'stutter*', 'performance', 'freeze', 'freezing', 'bug', 'glitch', 'broken', 'not working'],
-    reply: '🔧 TROUBLESHOOTING\n• Open Settings and set Graphics Quality to Medium or Low\n• Close other browser tabs and heavy apps\n• Plug in your charger and use the high-performance power mode\n• Use Chrome or Edge and refresh with Ctrl + Shift + R\n• If the mouse is stuck, press Esc, then press Resume',
+    reply: '🔧 TROUBLESHOOTING\n• Open Settings and set Graphics Quality to Medium or Low\n• Close other browser tabs and heavy apps\n• On a laptop, plug in your charger and use the high-performance power mode\n• Use Chrome or Edge and refresh with Ctrl + Shift + R (on a phone, reload the page twice)\n• If the mouse is stuck, press Esc, then press Resume',
     chips: ['Open settings?', 'How do I play?'] },
 
   { id: 'difficulty',
     keys: ['hard', 'difficult*', 'easy', 'too hard', 'too easy', 'impossible'],
-    reply: '📈 DIFFICULTY\nBoth modes get harder as you go. If it feels too hard, use cover, keep moving, scope in for far enemies, and in War Mode use your squad orders. You can also turn on aim assist with V.',
-    chips: ['Give me a tip', 'Scope and aim assist'] },
+    reply: '📈 DIFFICULTY\nBoth modes get harder as you go. If it feels too hard, use cover, keep moving, scope in for far enemies, and in War Mode pick DUO or SQUAD so teammates help you. Aim assist also helps (automatic on phones, V on PC). Want a real challenge? Try SOLO!',
+    chips: ['Give me a tip', 'Solo, Duo or Squad?'] },
 
   /* ----- about the project ----- */
   { id: 'creator',
@@ -514,12 +550,12 @@ const INTENTS = [
 
   { id: 'expo',
     keys: ['expo', 'college', 'forte', 'sargodha', 'competition', 'project', 'what is this project', 'what is this'],
-    reply: '🎓 THE PROJECT\nGame Hub is an entry for the AI/IT Expo 2026 at Forte Colleges of Excellence, Sargodha. Its flagship, NOVA STRIKE 3D, shows a 3D game with AI-controlled enemies and squad mates, procedural audio and an in-game AI assistant (me!), all built with free, open web technology.',
+    reply: '🎓 THE PROJECT\nGame Hub is an entry for the AI/IT Expo 2026 at Forte Colleges of Excellence, Sargodha. Its flagship, NOVA STRIKE 3D, shows a 3D game with AI-controlled enemies and teammates, procedural audio, phone support and an in-game AI assistant (me!), all built with free, open web technology.',
     chips: ['Who made this?', 'How does the AI work?'] },
 
   { id: 'whoareyou',
     keys: ['who are you', 'your name', 'what are you', 'are you real', 'are you ai', 'introduce yourself', 'what can you do', 'help', 'help me'],
-    reply: 'I am NOVA, the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the controls, enemies, waves, your squad, weapons, settings, or how the game was built. In a match I can also read your live stats. Try "My status"!',
+    reply: 'I am NOVA, the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the controls, enemies, waves, your team, weapons, settings, phones, or how the game was built. In a match I can also read your live stats. Try "My status"!',
     chips: DEFAULT_CHIPS },
 
   { id: 'time', keys: ['what time', 'current time', 'time now', 'what day', 'todays date', 'what date', 'date today'], reply: timeReply },
@@ -531,7 +567,7 @@ const INTENTS = [
     reply: () => pick(['You are welcome! Good luck out there! 🎯', 'Anytime! Now go clear that wave. 💪', 'Happy to help! Show those enemies who is boss.']),
     chips: ['Give me a tip'] },
 
-  { id: 'bye', keys: ['bye', 'goodbye', 'see you', 'later', 'cya'], reply: 'Goodbye, pilot! Press T anytime you need me. 👋' },
+  { id: 'bye', keys: ['bye', 'goodbye', 'see you', 'later', 'cya'], reply: 'Goodbye, pilot! Come back anytime you need me. 👋' },
 
   { id: 'howareyou', keys: ['how are you', 'how r u', 'whats up', 'sup'],
     reply: () => pick(['Running at 60 frames per second and feeling great! How about you?', 'All systems online! Ready to help you survive.']),
@@ -615,7 +651,7 @@ function getReply(text) {
       text: pick([
         'Hmm, I am not sure about that one. 🤔',
         'I did not quite get that. 🤔'
-      ]) + '\nI know about the controls, enemies, waves, weapons, settings, the squad and how the game was built. Try one of these:',
+      ]) + '\nI know about the controls, enemies, waves, weapons, settings, your team, phones and how the game was built. Try one of these:',
       chips: DEFAULT_CHIPS.slice(0, 4)
     };
   }
@@ -686,8 +722,8 @@ function botSay(text, chips, token) {
 
 const WELCOME = {
   arena: 'Hi, I am ' + BOT_NAME + ', the AI assistant of NOVA STRIKE 3D. 🤖\nYou are in Arena Mode. Ask me about the controls, drones, waves, scoring or how this game was built. I even know your live stats!',
-  war: 'Hi, I am ' + BOT_NAME + ', the AI assistant of NOVA STRIKE 3D. 🤖\nYou are in War Mode, Commander. Ask me about squad orders, enemy types, weapons, the boss or the controls. I can read your live stats too!',
-  hub: 'Hi, I am ' + BOT_NAME + ', the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the game modes, the controls, how the game was built, or how I work. Press T anytime to talk to me!'
+  war: 'Hi, I am ' + BOT_NAME + ', the AI assistant of NOVA STRIKE 3D. 🤖\nYou are in War Mode, Commander. Ask me about Solo, Duo or Squad, enemy types, weapons, the boss or the controls. I can read your live stats too!',
+  hub: 'Hi, I am ' + BOT_NAME + ', the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the game modes, the controls, phones, how the game was built, or how I work. Tap my badge anytime to talk to me!'
 };
 
 function welcome() {
@@ -724,7 +760,7 @@ formEl.addEventListener('submit', (e) => {
 });
 
 /* =====================================================
-   7. OPEN / CLOSE  (T key)
+   7. OPEN / CLOSE  (T key on PC, badge tap on phones)
    ===================================================== */
 let isOpen = false;
 let welcomed = false;
@@ -772,15 +808,22 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 /* =====================================================
-   8. BADGE ONLY DURING A MATCH
-   The "T AI Assistant" badge hides on menus and shows once the battle starts.
-   Set a mode to false below if you want the badge always visible there.
+   8. BADGE VISIBILITY
+   PC:     the badge hides on menus and shows once the battle starts.
+   Phones: the badge shows on menus and the pause screen, and hides during a match
+           (so it never blocks the touch controls).
    ===================================================== */
 const BADGE_ONLY_IN_MATCH = { arena: true, war: true, hub: false };
 
 function updateBadge() {
-  const needMatch = BADGE_ONLY_IN_MATCH[MODE];
-  const show = !isOpen && (!needMatch || inMatch());
+  let show;
+  if (IS_TOUCH) {
+    const paused = MODE !== 'hub' && !isHidden('pause-screen');
+    show = !isOpen && (MODE === 'hub' || !inMatch() || paused);
+  } else {
+    const needMatch = BADGE_ONLY_IN_MATCH[MODE];
+    show = !isOpen && (!needMatch || inMatch());
+  }
   badge.style.display = show ? '' : 'none';
 }
 updateBadge();

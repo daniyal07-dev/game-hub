@@ -1,10 +1,12 @@
 // games/war/teammates.js
-// The 4 AI teammates: Alpha (Assault), Bravo (Assault), Hawk (Sniper), Doc (Medic).
+// The AI teammates: Alpha (Assault), Bravo (Assault), Hawk (Sniper), Doc (Medic).
 // Handles squad movement, combat, Doc's healing, and Z/X/C squad orders.
+// v2: TEAM MODES. Solo (no teammates), Duo (2) or Squad (4). Chosen when a stage starts.
 //
 // KNOBS (change these numbers to tune the squad):
 //   SPEED       - teammate walking speed multiplier (lower = slower)
 //   CATCH_UP    - extra speed when they fall far behind the player
+//   MODES       - who is in each team mode (use the ids: alpha, bravo, hawk, doc)
 //   Each role has its own firing "range" (metres) below.
 
 import * as THREE from 'three';
@@ -17,6 +19,13 @@ const SPEED = 0.8;          // 1.0 = original speed
 const CATCH_UP = 1.4;       // speed boost when more than CATCH_DIST from the player
 const CATCH_DIST = 14;      // metres
 const STAND_OFF = 0.7;      // in "attack" order they stop at 70% of their range
+
+// Team modes: which teammates join you
+const MODES = {
+  solo:  [],
+  duo:   ['alpha', 'doc'],
+  squad: ['alpha', 'bravo', 'hawk', 'doc']
+};
 
 // Roles definition (range = firing range in metres, spread = aim error)
 const ROLES = [
@@ -35,6 +44,8 @@ export function createSquad(ctx) {
   let order = 'follow';            // 'follow' (Z) | 'hold' (X) | 'attack' (C)
   let orderTarget = null;
   let healCooldown = 0;
+  let teamSize = 4;                // how many teammates this mission started with
+  let teamMode = 'squad';
 
   const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Vector3();
 
@@ -74,6 +85,7 @@ export function createSquad(ctx) {
 
   /* ---------- Orders ---------- */
   function setOrder(newOrder, target = null) {
+    if (teamSize === 0) return;      // Solo: nobody to give orders to
     order = newOrder;
     orderTarget = target;
     play('order');
@@ -93,6 +105,7 @@ export function createSquad(ctx) {
     const player = ctx.getPlayer();
     const enemies = ctx.getEnemies();
     if (!map || !player) return;
+    if (list.length === 0) return;   // Solo (or everyone is down): nothing to update
 
     healCooldown -= dt;
 
@@ -213,13 +226,22 @@ export function createSquad(ctx) {
     }
   }
 
-  function reset(squadStart) {
+  // mode = 'solo' | 'duo' | 'squad'
+  function reset(squadStart, mode = 'squad') {
     for (const tm of list) { group.remove(tm.mesh); disposeObject(tm.mesh); }
     list.length = 0;
     order = 'follow';
     orderTarget = null;
     healCooldown = 0;
-    ROLES.forEach((def, i) => spawn(def, squadStart[i] || [0, 0]));
+
+    teamMode = MODES[mode] ? mode : 'squad';
+    const members = MODES[teamMode];
+    teamSize = members.length;
+
+    // each teammate keeps their own start spot (index in ROLES)
+    ROLES.forEach((def, i) => {
+      if (members.includes(def.id)) spawn(def, (squadStart && squadStart[i]) || [0, 0]);
+    });
   }
 
   function dispose() {
@@ -231,6 +253,8 @@ export function createSquad(ctx) {
   return {
     list,
     get order() { return order; },
+    get size() { return teamSize; },     // teammates at the start of this mission (0, 2 or 4)
+    get mode() { return teamMode; },
     setOrder,
     update, reset, dispose
   };
