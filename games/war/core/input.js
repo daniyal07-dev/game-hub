@@ -1,6 +1,16 @@
 // games/war/core/input.js
 // Keyboard, mouse look, shooting and pointer lock for War Mode.
 // v4: SPACE also shoots (hold = keep firing, like the mouse button). Arrow keys still turn the camera.
+// v5: TOUCH BRIDGE for phones. Only active on touch devices (or ?touch=1). PC is unchanged.
+//     On phones there is no pointer lock, so "locked" is simulated, and touch.js
+//     (the on-screen buttons) drives the game through touchKey/touchFire/touchLook/touchWheel.
+// v6: loads touch.js automatically on phones (PC never loads it).
+
+const IS_TOUCH =
+  (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+  /[?&]touch=1/.test(location.search);
+
+const TOUCH_LOOK_MULT = 2.0;   // swipe-to-look strength on phones (higher = faster turning)
 
 export function createInput(domElement) {
   const down = new Set();
@@ -45,6 +55,7 @@ export function createInput(domElement) {
 
   const api = {
     sensitivity: levelToSens(level),
+    isTouch: IS_TOUCH,
 
     getSensitivityLevel() { return level; },
     setSensitivityLevel(lv, silent) {
@@ -90,14 +101,46 @@ export function createInput(domElement) {
       return { x, y };
     },
 
-    /* ----- Pointer lock ----- */
+    /* ----- Pointer lock (on phones: simulated) ----- */
     get locked() { return locked; },
     lock() { requestLock(); },
     unlock() {
+      if (IS_TOUCH) { setLocked(false); return; }
       clearTimeout(retryTimer);
       if (document.pointerLockElement) document.exitPointerLock();
     },
     onLockChange(fn) { lockCallback = fn; },
+
+    /* ----- TOUCH BRIDGE (used by touch.js, ignored on PC) ----- */
+    // Hold or release a key, e.g. touchKey('KeyW', true)
+    touchKey(code, isDown) {
+      if (isDown) {
+        if (down.has(code)) return;
+        down.add(code);
+        if (!locked) return;
+        const list = pressHandlers[code];
+        if (list) list.forEach(fn => fn());
+      } else {
+        down.delete(code);
+      }
+    },
+    // Fire button held / released
+    touchFire(isDown) {
+      if (!locked) return;
+      if (isDown) { mouseHeld = true; fireQueued = true; }
+      else mouseHeld = false;
+    },
+    // Swipe movement in pixels
+    touchLook(dx, dy) {
+      if (!locked) return;
+      lookX += dx * TOUCH_LOOK_MULT;
+      lookY += dy * TOUCH_LOOK_MULT;
+    },
+    // Weapon button: acts like one mouse-wheel notch (dir = 1 or -1)
+    touchWheel(dir) {
+      if (!locked) return;
+      wheelHandlers.forEach(fn => fn(dir));
+    },
 
     clear() {
       down.clear();
@@ -125,8 +168,20 @@ export function createInput(domElement) {
     }
   };
 
+  /* Simulated lock for phones */
+  function setLocked(v) {
+    if (locked === v) return;
+    locked = v;
+    if (!locked) {
+      lastUnlock = performance.now();
+      api.clear();
+    }
+    if (lockCallback) lockCallback(locked);
+  }
+
   /* ---------- Safe pointer lock ---------- */
   function requestLock() {
+    if (IS_TOUCH) { setLocked(true); return; }
     if (document.pointerLockElement === domElement) return;
 
     const wait = 1100 - (performance.now() - lastUnlock);
@@ -179,20 +234,22 @@ export function createInput(domElement) {
     if (e.code === 'Space') mouseHeld = false;
   }
 
+  // On phones the browser fakes mouse events after every tap; ignore them (touch.js handles touches).
   function onMouseMove(e) {
-    if (!locked) return;
+    if (IS_TOUCH || !locked) return;
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
     lookX += e.movementX;
     lookY += e.movementY;
   }
 
   function onMouseDown(e) {
-    if (!locked || e.button !== 0) return;
+    if (IS_TOUCH || !locked || e.button !== 0) return;
     mouseHeld = true;
     fireQueued = true;
   }
 
   function onMouseUp(e) {
+    if (IS_TOUCH) return;
     if (e.button === 0) mouseHeld = false;
   }
 
@@ -228,6 +285,13 @@ export function createInput(domElement) {
   document.addEventListener('pointerlockerror', onLockError);
   domElement.addEventListener('click', onCanvasClick);
   window.addEventListener('wheel', onWheel, { passive: true });
+
+  // Phones only: load the on-screen buttons (touch.js sits in the same folder)
+  if (IS_TOUCH) {
+    import('./touch.js')
+      .then(m => m.initTouch(api))
+      .catch(err => console.warn('Touch controls could not load:', err));
+  }
 
   return api;
 }
