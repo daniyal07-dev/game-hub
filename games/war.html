@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>War Mode · NOVA STRIKE 3D</title>
   <link rel="stylesheet" href="arena.css">
   <link rel="stylesheet" href="war.css">
@@ -35,6 +35,21 @@
       font-size: 12px;
       text-align: center;
       opacity: 0.6;
+    }
+
+    /* Phone-only how-to-play line (hidden on PC) */
+    .phone-help { display: none; }
+    @media (pointer: coarse) {
+      .phone-help {
+        display: block;
+        margin: 6px 0 10px;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: center;
+        color: #a9b0d8;
+      }
+      .phone-help b { color: #00f0ff; }
+      html, body { overscroll-behavior: none; }
     }
   </style>
 
@@ -166,6 +181,12 @@
         <li><b>C</b> Squad: Attack my target</li>
         <li><b>Esc</b> Pause</li>
       </ul>
+
+      <!-- Phones only -->
+      <p class="phone-help">
+        <b>Left thumb</b> move (push far to sprint) · <b>Swipe right side</b> look<br>
+        <b>FIRE</b> shoot · <b>GUN</b> change weapon · <b>ORDER</b> squad command · 💣 grenade
+      </p>
 
       <button id="play-btn" class="btn">▶ DEPLOY</button>
 

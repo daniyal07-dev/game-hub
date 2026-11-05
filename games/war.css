@@ -269,3 +269,84 @@ body.in-game #weapon-bar {
 #result-title {
   color: #3dff9a;
 }
+
+/* =====================================================
+   PHONES ONLY (touch screens). PC is not affected.
+   Compact menus and a smaller HUD so the touch buttons have room.
+   ===================================================== */
+@media (pointer: coarse) {
+
+  /* ----- menus ----- */
+  .overlay .panel,
+  .panel.wide {
+    max-height: 94vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 16px;
+    width: 94vw;
+  }
+  .panel h1 { font-size: 26px; margin: 0 0 2px; }
+  .panel h2 { font-size: 22px; margin: 0 0 8px; }
+  .subtitle { font-size: 12px; margin: 0 0 4px; }
+
+  .controls { display: none; }            /* keyboard list is useless on a phone */
+
+  #stage-list { gap: 6px; margin: 8px 0 4px; }
+  .stage-card { padding: 8px 4px; }
+  .stage-name { font-size: 12px; margin: 3px 0 2px; }
+  .stage-desc { display: none; }
+  .stage-num { font-size: 10px; letter-spacing: 1px; }
+  .stage-stars { font-size: 12px; margin-top: 2px; }
+
+  .panel .btn { padding: 10px 14px; font-size: 15px; }
+  #boss-btn { margin-top: 6px; }
+  #boss-hint { font-size: 11px; margin: 4px 0 0; }
+  .best-line { font-size: 13px; margin: 4px 0; }
+
+  .setting-row { margin-bottom: 6px; }
+  #result-stars { font-size: 32px; margin: 2px 0 8px; }
+  .stats { font-size: 14px; }
+
+  /* ----- in-game HUD (smaller, out of the way of the touch buttons) ----- */
+  #team-panel {
+    top: 8px; left: 8px; width: 128px; padding: 6px 8px;
+  }
+  .team-title { display: none; }
+  .team-row { font-size: 11px; gap: 5px; margin-bottom: 3px; }
+  .team-icon { width: 12px; font-size: 10px; }
+  .team-name { width: 38px; }
+  .team-bar { height: 6px; }
+  #order-label { font-size: 9px; margin-top: 4px; padding-top: 4px; letter-spacing: 1px; }
+
+  #objective { display: none; }           /* the top-centre label already shows the objective */
+  #weapon-bar { display: none !important; }   /* the GUN button shows the current weapon */
+
+  #radar-box {
+    top: 8px; right: 62px; width: 104px; height: 104px;
+  }
+  #radar { width: 104px; height: 104px; }
+
+  /* ammo moves up under the radar so it never sits behind the FIRE button */
+  #ammo-box {
+    position: fixed !important;
+    top: 118px !important; right: 12px !important;
+    bottom: auto !important; left: auto !important;
+    transform: none !important;
+    padding: 4px 8px;
+    background: rgba(10, 10, 30, 0.55);
+    border-radius: 8px;
+  }
+  #weapon-name { font-size: 10px; letter-spacing: 2px; }
+  #ammo { font-size: 18px; }
+  #grenade-count { font-size: 12px; margin-top: 2px; }
+
+  /* messages go to the top centre (the bottom is full of buttons) */
+  #comms {
+    top: 58px; bottom: auto;
+    width: 44vw; padding: 6px 10px;
+  }
+  #comms-name { font-size: 9px; }
+  #comms-text { font-size: 12px; line-height: 1.3; }
+
+  #reload-msg { font-size: 14px; }
+}
