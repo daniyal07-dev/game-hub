@@ -1,9 +1,10 @@
 // games/war/core/touch.js
 // On-screen touch controls for War Mode on phones.
 // Left side: floating joystick (push to the edge = sprint).
-// Right side: swipe anywhere to look, FIRE, WEAPON (cycles guns), ORDERS (cycles Follow/Hold/Attack),
+// Right side: swipe anywhere to look, FIRE, GUN (cycles guns), ORDER (cycles Follow/Hold/Attack),
 //             GRENADE (small), and a PAUSE button.
-// Automatic on phones: aim assist ON, Medium graphics (first time only), fullscreen + landscape lock.
+// Automatic on phones: aim assist ON, Medium graphics (no bloom), fullscreen + landscape lock.
+// v2: bloom is forced off on phones every match, and the HUD is smaller (less text).
 // It talks to the game only through input.touchKey / touchFire / touchLook / touchWheel.
 // PC never loads this file.
 
@@ -15,6 +16,10 @@ const FIRE_SIZE = 96;        // px
 const WEAPON_NAMES = ['PISTOL', 'RIFLE', 'SHOTGUN'];   // same order as items.js
 const ORDER_NAMES = ['FOLLOW', 'HOLD', 'ATTACK'];      // Z, X, C
 const ORDER_KEYS = ['KeyZ', 'KeyX', 'KeyC'];
+
+/* HUD knobs for phones */
+const SHOW_COMMS = true;     // false = hide all command messages on phones
+const SHOW_SQUAD = true;     // false = hide the squad health panel on phones
 
 let started = false;
 
@@ -53,6 +58,40 @@ export function initTouch(input) {
       background:#000; color:#fff; font:700 20px system-ui,Arial,sans-serif; text-align:center; padding:30px;
       pointer-events:none; }
     @media (orientation: portrait) { #t-rotate.on { display:flex; } }
+
+    /* ===== PHONE HUD: smaller, less text ===== */
+    #hud { background:none !important; border:none !important; box-shadow:none !important; padding:0 !important; }
+    #score-box { display:none !important; }
+
+    /* health: small bar in the bottom-left corner */
+    #health-box { position:fixed !important; left:10px !important; bottom:6px !important; top:auto !important;
+      transform:none !important; display:flex !important; align-items:center !important; gap:6px !important;
+      width:auto !important; margin:0 !important; padding:3px 8px !important;
+      background:rgba(10,10,30,0.5) !important; border-radius:8px !important; }
+    #health-box .hud-label { display:none !important; }
+    #health-bar { width:90px !important; height:7px !important; margin:0 !important; }
+    #health-text { font-size:12px !important; min-width:22px !important; margin:0 !important; line-height:1 !important; }
+
+    /* ammo: small, under the radar (the GUN button already shows the weapon name) */
+    #ammo-box { padding:3px 7px !important; }
+    #weapon-name { display:none !important; }
+    #ammo { font-size:14px !important; }
+    #grenade-count { font-size:11px !important; margin-top:1px !important; }
+
+    /* top-centre stage/objective label */
+    #wave-label { font-size:12px !important; letter-spacing:1px !important; }
+    #enemy-label { font-size:10px !important; }
+
+    /* messages */
+    #order-label { display:none !important; }
+    #squad-alert { font-size:11px !important; }
+    #banner-title { font-size:20px !important; letter-spacing:2px !important; }
+    #banner-sub { font-size:11px !important; }
+    #comms { width:38vw !important; padding:4px 8px !important; ${SHOW_COMMS ? '' : 'display:none !important;'} }
+    #comms-name { display:none !important; }
+    #comms-text { font-size:10px !important; line-height:1.25 !important; }
+    #reload-msg { font-size:12px !important; }
+    ${SHOW_SQUAD ? '' : '#team-panel { display:none !important; }'}
   `;
   document.head.appendChild(style);
 
@@ -236,6 +275,12 @@ export function initTouch(input) {
   /* ---------- Show / hide with the game, and one-time phone setup ---------- */
   let wasInGame = false, aimDone = false;
 
+  // Bloom is part of the "High" quality. On phones, never stay on High.
+  function forceNoBloom() {
+    const qb = document.getElementById('quality-btn');
+    if (qb && qb.textContent.trim() === 'High') qb.click();    // High -> Medium (no bloom)
+  }
+
   function onGameStart() {
     orderIdx = 0;            // the squad starts on FOLLOW
     weaponIdx = 1;           // and you start with the rifle
@@ -248,14 +293,11 @@ export function initTouch(input) {
       window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyV' }));
     }
 
-    // First time only: switch graphics from High to Medium (no bloom) so phones run smoothly.
-    try {
-      if (!localStorage.getItem('war_quality')) {
-        const qb = document.getElementById('quality-btn');
-        if (qb) qb.click();
-      }
-    } catch (e) { /* ignore */ }
+    forceNoBloom();
   }
+
+  // Also switch bloom off as soon as the page is ready (before Deploy is pressed)
+  setTimeout(forceNoBloom, 800);
 
   setInterval(() => {
     const inGame = document.body.classList.contains('in-game');
