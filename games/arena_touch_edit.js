@@ -4,6 +4,7 @@
 // Drag FIRE / SCOPE / RELOAD / PAUSE to move them; sliders change size and transparency.
 // SAVE keeps the layout on this phone (localStorage). RESET = default. CANCEL = discard.
 // PC never runs this (it only starts on touch screens). arena.js is not changed.
+// v2: fixed a freeze (the class observer re-triggered itself in an endless loop).
 
 const KEY = 'arenaTouchLayout';
 const IDS = ['t-fire', 't-scope', 't-reload', 't-pause'];
@@ -79,8 +80,12 @@ function init() {
 
   // Re-apply when the touch controls become visible (sizes are known then),
   // and keep them visible while the editor is open.
+  // IMPORTANT: only touch the class when it really needs to change (otherwise endless loop).
   new MutationObserver(() => {
-    if (editing) { ui.classList.remove('hidden'); return; }
+    if (editing) {
+      if (ui.classList.contains('hidden')) ui.classList.remove('hidden');
+      return;
+    }
     if (!ui.classList.contains('hidden')) applyPos();
   }).observe(ui, { attributes: true, attributeFilter: ['class'] });
 
@@ -155,7 +160,7 @@ function init() {
 
     const wasHidden = ui.classList.contains('hidden');
     settings.style.display = 'none';
-    ui.classList.remove('hidden');
+    if (wasHidden) ui.classList.remove('hidden');
     ui.classList.add('ate-editing');
     applyLayout();
 
@@ -198,7 +203,7 @@ function init() {
       drags.clear();
       IDS.forEach(id => { const el = $(id); if (el) el.classList.remove('ate-sel'); });
       ui.classList.remove('ate-editing');
-      if (wasHidden) ui.classList.add('hidden');
+      if (wasHidden && !ui.classList.contains('hidden')) ui.classList.add('hidden');
       settings.style.display = '';
       backdrop.remove();
       panel.remove();
@@ -227,9 +232,7 @@ function init() {
     panel.querySelector('#ate-cancel').addEventListener('click', () => {
       IDS.forEach(id => { const el = $(id); if (el) clearEl(el); });
       layout = load();
-      editing = false;            // so applyLayout can clamp normally
       applyLayout();
-      editing = true;
       close();
     });
   }
