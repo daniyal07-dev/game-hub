@@ -5,6 +5,7 @@
 // v6: character height is measured correctly (skeleton updated first, every vertex measured,
 //     then re-checked), average human heights, camp pieces have a size multiplier (CAMP_SCALE).
 // v7: BOSS model (models/characters/boss.glb). makeBoss() + makeMech(scale, true) use it.
+// v8: ground enemies a bit taller (CHAR_HEIGHT.enemy 1.75 -> 2.0).
 
 import * as THREE from 'three';
 
@@ -36,7 +37,7 @@ const GUN_SIZES  = { pistol: 0.38, rifle: 0.6, shotgun: 0.66 };
 const CHAR_YAW    = { enemy: Math.PI, teammate: Math.PI, boss: Math.PI };
 // Height of each character in metres. Smaller number = smaller model. (average person = 1.7)
 // boss = 3.2 means almost twice as tall as a soldier. Change it if you want a bigger / smaller boss.
-const CHAR_HEIGHT = { enemy: 1.75, teammate: 1.7, boss: 4.5 };
+const CHAR_HEIGHT = { enemy: 2.0, teammate: 1.7, boss: 4.5 };
 const HEAVY_SCALE = 1.1;         // heavy enemy is a bit taller than a normal one
 const TEAM_MARKER = true;        // small coloured arrow above teammates so you never shoot them
 const MARKER_SIZE = 0.8;         // 1 = normal, 0.5 = half size

@@ -5,6 +5,8 @@
 //             GRENADE (small), and a PAUSE button.
 // Automatic on phones: aim assist ON, Medium graphics (no bloom), fullscreen + landscape lock.
 // v2: bloom is forced off on phones every match, and the HUD is smaller (less text).
+// v3: customizable buttons. Saved layout is loaded here; the editor itself lives in
+//     core/touch_edit.js (loaded only on phones; if that file is missing, nothing breaks).
 // It talks to the game only through input.touchKey / touchFire / touchLook / touchWheel.
 // PC never loads this file.
 
@@ -21,6 +23,10 @@ const ORDER_KEYS = ['KeyZ', 'KeyX', 'KeyC'];
 const SHOW_COMMS = true;     // false = hide all command messages on phones
 const SHOW_SQUAD = true;     // false = hide the squad health panel on phones
 
+/* Layout save (phone only) */
+const LAYOUT_KEY = 'warTouchLayout';
+const BTN_IDS = ['t-fire', 't-weapon', 't-order', 't-grenade', 't-pause'];
+
 let started = false;
 
 export function initTouch(input) {
@@ -34,6 +40,9 @@ export function initTouch(input) {
       -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none;
       font-family:system-ui,Segoe UI,Arial,sans-serif; }
     #touch-ui * { -webkit-tap-highlight-color:transparent; touch-action:none; }
+    #touch-ui.editing { z-index:99990; }
+    #touch-ui.editing .t-zone { pointer-events:none; }
+    #touch-ui.editing #t-order { display:flex !important; }
     .t-zone { position:absolute; top:0; bottom:0; pointer-events:auto; }
     #t-joy-zone { left:0; width:42%; }
     #t-look-zone { left:42%; right:0; }
@@ -122,6 +131,94 @@ export function initTouch(input) {
   const btnOrder = $('t-order'), btnWeapon = $('t-weapon');
   const btnGrenade = $('t-grenade'), btnFire = $('t-fire'), btnPause = $('t-pause');
 
+  /* ---------- Saved button layout (v3) ---------- */
+  let editing = false;
+  let layout = loadLayout();
+  const moved = new Set(Object.keys(layout.pos));
+
+  function emptyLayout() { return { scale: 1, opacity: 1, pos: {} }; }
+
+  function loadLayout() {
+    try {
+      const raw = localStorage.getItem(LAYOUT_KEY);
+      if (!raw) return emptyLayout();
+      const l = JSON.parse(raw);
+      return {
+        scale: Math.min(1.8, Math.max(0.5, Number(l.scale) || 1)),
+        opacity: Math.min(1, Math.max(0.2, Number(l.opacity) || 1)),
+        pos: (l.pos && typeof l.pos === 'object') ? l.pos : {}
+      };
+    } catch (e) { return emptyLayout(); }
+  }
+
+  function clearPos(el) {
+    el.style.left = ''; el.style.top = ''; el.style.right = ''; el.style.bottom = '';
+  }
+
+  function placeEl(el, left, top) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+    el.style.left = Math.max(0, Math.min(W - w, left)) + 'px';
+    el.style.top = Math.max(0, Math.min(H - h, top)) + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  }
+
+  function applyLayout() {
+    const W = window.innerWidth, H = window.innerHeight;
+    BTN_IDS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      el.style.scale = layout.scale !== 1 ? String(layout.scale) : '';
+      el.style.opacity = layout.opacity < 1 ? String(layout.opacity) : '';
+      const p = layout.pos[id];
+      if (p && typeof p.x === 'number' && typeof p.y === 'number') placeEl(el, p.x * W, p.y * H);
+      else clearPos(el);
+    });
+  }
+  applyLayout();
+  window.addEventListener('resize', applyLayout);
+  window.addEventListener('orientationchange', () => setTimeout(applyLayout, 300));
+
+  // Used by touch_edit.js
+  const editApi = {
+    ids: BTN_IDS,
+    ui,
+    getLayout: () => layout,
+    setEditing(on) {
+      editing = !!on;
+      ui.classList.toggle('editing', editing);
+      if (editing) { releaseAll(); applyLayout(); }
+    },
+    setScale(s) { layout.scale = Math.min(1.8, Math.max(0.5, s)); applyLayout(); },
+    setOpacity(o) { layout.opacity = Math.min(1, Math.max(0.2, o)); applyLayout(); },
+    moveTo(id, left, top) {
+      const el = $(id);
+      if (!el) return;
+      placeEl(el, left, top);
+      moved.add(id);
+    },
+    save() {
+      const W = window.innerWidth, H = window.innerHeight;
+      moved.forEach(id => {
+        const el = $(id);
+        if (el && el.offsetWidth) layout.pos[id] = { x: el.offsetLeft / W, y: el.offsetTop / H };
+      });
+      try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (e) { /* ignore */ }
+    },
+    cancel() {                       // go back to the last saved layout
+      layout = loadLayout();
+      moved.clear(); Object.keys(layout.pos).forEach(k => moved.add(k));
+      applyLayout();
+    },
+    reset() {                        // default positions
+      try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* ignore */ }
+      layout = emptyLayout();
+      moved.clear();
+      applyLayout();
+    }
+  };
+
   /* ---------- State ---------- */
   let orderIdx = 0;      // follow
   let weaponIdx = 1;     // rifle (the game starts with the rifle)
@@ -167,7 +264,7 @@ export function initTouch(input) {
 
   joyZone.addEventListener('touchstart', e => {
     e.preventDefault();
-    if (joyId !== null) return;
+    if (editing || joyId !== null) return;
     const t = e.changedTouches[0];
     joyId = t.identifier; joyX = t.clientX; joyY = t.clientY;
     joyBase.style.left = joyX + 'px'; joyBase.style.top = joyY + 'px'; joyBase.style.display = 'block';
@@ -195,7 +292,7 @@ export function initTouch(input) {
   let lookId = null, lx = 0, ly = 0;
   lookZone.addEventListener('touchstart', e => {
     e.preventDefault();
-    if (lookId !== null) return;
+    if (editing || lookId !== null) return;
     const t = e.changedTouches[0];
     lookId = t.identifier; lx = t.clientX; ly = t.clientY;
   }, { passive: false });
@@ -220,12 +317,14 @@ export function initTouch(input) {
   function bindBtn(el, onDown, onUp) {
     el.addEventListener('touchstart', e => {
       e.preventDefault();
+      if (editing) return;                 // in the editor, buttons only move
       el.classList.add('down');
       onDown();
     }, { passive: false });
     const up = (e) => {
       e.preventDefault();
       el.classList.remove('down');
+      if (editing) return;
       if (onUp) onUp();
     };
     el.addEventListener('touchend', up, { passive: false });
@@ -273,7 +372,7 @@ export function initTouch(input) {
   }, { passive: true });
 
   /* ---------- Show / hide with the game, and one-time phone setup ---------- */
-  let wasInGame = false, aimDone = false;
+  let wasInGame = false, aimDone = false, wasShown = false;
 
   // Bloom is part of the "High" quality. On phones, never stay on High.
   function forceNoBloom() {
@@ -302,15 +401,37 @@ export function initTouch(input) {
   setInterval(() => {
     const inGame = document.body.classList.contains('in-game');
     const overlayOpen = !!document.querySelector('.overlay:not(.hidden)');
-    const show = inGame && !overlayOpen;
+    const show = editing || (inGame && !overlayOpen);
 
     ui.style.display = show ? 'block' : 'none';
     rotate.classList.toggle('on', show);
     if (!show) releaseAll();
+    if (show && !wasShown) applyLayout();      // sizes are known once visible
+    wasShown = show;
 
     if (inGame && !wasInGame) onGameStart();
     wasInGame = inGame;
   }, 150);
+
+  /* ---------- Button editor (separate file, phones only) ---------- */
+  // Adds an "EDIT BUTTONS" button to the Pause and Settings screens,
+  // but only if touch_edit.js loads fine. If the file is missing, nothing happens.
+  import('./touch_edit.js').then(mod => {
+    if (!mod || typeof mod.openEditor !== 'function') return;
+    ['pause-screen', 'settings-screen'].forEach(id => {
+      const screen = document.getElementById(id);
+      if (!screen || screen.querySelector('.edit-buttons-btn')) return;
+      const panel = screen.querySelector('.panel') || screen;
+      const sample = panel.querySelector('button');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = (sample ? sample.className : 'btn') + ' edit-buttons-btn';
+      b.textContent = 'EDIT BUTTONS';
+      b.addEventListener('click', () => mod.openEditor(editApi));
+      const row = panel.querySelector('.btn-row');
+      if (row) panel.insertBefore(b, row); else panel.appendChild(b);
+    });
+  }).catch(() => { /* touch_edit.js not found: no editor, game works as before */ });
 
   console.log('✅ Touch controls ready');
 }

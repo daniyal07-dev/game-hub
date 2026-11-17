@@ -3,6 +3,7 @@
 // stage objectives (beacon, generators, boss), wave manager and results/unlock tracking.
 // v2: wave manager for Stage 1 (4 waves + boss), weapon-name label fix, wave banner.
 // v3: squad panel rows now match the right teammate (Solo / Duo / Squad), unused rows hidden.
+// v4: RADAR FIX. The map now rotates the correct way, so enemies behind you show behind you.
 
 import * as THREE from 'three';
 import map1 from './maps/map1.js';
@@ -61,13 +62,14 @@ export function createRadar(canvas) {
       ctx.clip();
 
       const scale = 1.4;             // meters to radar pixels
+      const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
 
+      // The direction you face is always UP on the radar.
       const worldToRadar = (wx, wz) => {
         const dx = wx - playerPos.x;
         const dz = wz - playerPos.z;
-        // Rotate according to player facing yaw
-        const rx = dx * Math.cos(-yaw) - dz * Math.sin(-yaw);
-        const ry = dx * Math.sin(-yaw) + dz * Math.cos(-yaw);
+        const rx = dx * cosY - dz * sinY;
+        const ry = dx * sinY + dz * cosY;
         return { x: R + rx * scale, y: R + ry * scale };
       };
 
