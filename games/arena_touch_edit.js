@@ -4,13 +4,16 @@
 // Drag FIRE / SCOPE / RELOAD / PAUSE to move them; sliders change size and transparency.
 // SAVE keeps the layout on this phone (localStorage). RESET = default. CANCEL = discard.
 // PC never runs this (it only starts on touch screens). arena.js is not changed.
-// v2: fixed a freeze (the class observer re-triggered itself in an endless loop).
+// v3: no more class observer. The buttons are shown with CSS only while editing,
+//     and the game's own "hidden" class is never touched (fixes the freeze).
 
 const KEY = 'arenaTouchLayout';
 const IDS = ['t-fire', 't-scope', 't-reload', 't-pause'];
 const IS_PHONE = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
-if (IS_PHONE) init();
+if (IS_PHONE) {
+  try { init(); } catch (e) { console.warn('arena_touch_edit failed:', e); }
+}
 
 function init() {
   const $ = (id) => document.getElementById(id);
@@ -78,17 +81,6 @@ function init() {
   window.addEventListener('resize', () => { if (!editing) applyLayout(); });
   window.addEventListener('orientationchange', () => setTimeout(() => { if (!editing) applyLayout(); }, 300));
 
-  // Re-apply when the touch controls become visible (sizes are known then),
-  // and keep them visible while the editor is open.
-  // IMPORTANT: only touch the class when it really needs to change (otherwise endless loop).
-  new MutationObserver(() => {
-    if (editing) {
-      if (ui.classList.contains('hidden')) ui.classList.remove('hidden');
-      return;
-    }
-    if (!ui.classList.contains('hidden')) applyPos();
-  }).observe(ui, { attributes: true, attributeFilter: ['class'] });
-
   /* ---------- Styles ---------- */
   const st = document.createElement('style');
   st.textContent = `
@@ -108,13 +100,14 @@ function init() {
     #ate-save { background:#1f9d55; }
     #ate-reset { background:#c27a1a; }
     #ate-cancel { background:#6b7280; }
-    #touch-ui.ate-editing { z-index:99990 !important; }
-    #touch-ui.ate-editing .t-btn { outline:2px dashed #ffd24a; outline-offset:3px; }
+    #touch-ui.ate-editing { display:block !important; visibility:visible !important; z-index:99990 !important; }
+    #touch-ui.ate-editing .t-btn { display:flex !important; outline:2px dashed #ffd24a; outline-offset:3px; }
     #touch-ui.ate-editing .t-btn.ate-sel { outline-color:#fff; }
+    #touch-ui.ate-editing #look-zone, #touch-ui.ate-editing #joy-zone { pointer-events:none !important; }
   `;
   document.head.appendChild(st);
 
-  /* ---------- Block the game's own touch handling while editing + drag logic ---------- */
+  /* ---------- Drag logic (only active while editing) ---------- */
   const drags = new Map();   // touch id -> { el, sx, sy, left, top }
 
   function onTouch(e) {
@@ -158,9 +151,7 @@ function init() {
     editing = true;
     drags.clear();
 
-    const wasHidden = ui.classList.contains('hidden');
     settings.style.display = 'none';
-    if (wasHidden) ui.classList.remove('hidden');
     ui.classList.add('ate-editing');
     applyLayout();
 
@@ -203,7 +194,6 @@ function init() {
       drags.clear();
       IDS.forEach(id => { const el = $(id); if (el) el.classList.remove('ate-sel'); });
       ui.classList.remove('ate-editing');
-      if (wasHidden && !ui.classList.contains('hidden')) ui.classList.add('hidden');
       settings.style.display = '';
       backdrop.remove();
       panel.remove();
@@ -232,8 +222,8 @@ function init() {
     panel.querySelector('#ate-cancel').addEventListener('click', () => {
       IDS.forEach(id => { const el = $(id); if (el) clearEl(el); });
       layout = load();
-      applyLayout();
       close();
+      applyLayout();
     });
   }
 
