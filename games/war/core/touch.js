@@ -7,6 +7,7 @@
 // v2: bloom is forced off on phones every match, and the HUD is smaller (less text).
 // v3: customizable buttons. Saved layout is loaded here; the editor itself lives in
 //     core/touch_edit.js (loaded only on phones; if that file is missing, nothing breaks).
+// v4: the EDIT BUTTONS button appears only in Settings (not on the Pause screen).
 // It talks to the game only through input.touchKey / touchFire / touchLook / touchWheel.
 // PC never loads this file.
 
@@ -414,11 +415,11 @@ export function initTouch(input) {
   }, 150);
 
   /* ---------- Button editor (separate file, phones only) ---------- */
-  // Adds an "EDIT BUTTONS" button to the Pause and Settings screens,
+  // Adds an "EDIT BUTTONS" button to the Settings screen only,
   // but only if touch_edit.js loads fine. If the file is missing, nothing happens.
   import('./touch_edit.js').then(mod => {
     if (!mod || typeof mod.openEditor !== 'function') return;
-    ['pause-screen', 'settings-screen'].forEach(id => {
+    ['settings-screen'].forEach(id => {
       const screen = document.getElementById(id);
       if (!screen || screen.querySelector('.edit-buttons-btn')) return;
       const panel = screen.querySelector('.panel') || screen;
