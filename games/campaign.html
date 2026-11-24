@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NOVA STRIKE 3D - Campaign</title>
+
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0f18; color: #fff;
+      font-family: system-ui, "Segoe UI", Arial, sans-serif; }
+    .hidden { display: none !important; }
+    #game-container { position: fixed; inset: 0; }
+    #game-container canvas { display: block; }
+
+
+    /* small on-screen info */
+    #hud { position: fixed; left: 12px; top: 10px; z-index: 5; pointer-events: none;
+      text-shadow: 0 1px 3px #000; }
+    #hud-title { font-weight: 800; font-size: 12px; letter-spacing: 2px; color: #7fe9ff; }
+    #hud-info { font-size: 12px; margin-top: 3px; opacity: 0.9; font-variant-numeric: tabular-nums; }
+    #hud-mode { font-size: 12px; margin-top: 3px; color: #ffd24a; font-weight: 700; }
+    #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+      border-radius: 50%; background: rgba(255,255,255,0.8); z-index: 5; pointer-events: none; }
+
+
+    #loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
+      justify-content: center; background: #0a0f18; font-weight: 700; letter-spacing: 2px;
+      font-size: 18px; color: #7fe9ff; }
+
+
+    .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
+      justify-content: center; background: rgba(6,10,18,0.78); }
+    .panel { width: min(92vw, 540px); max-height: 92vh; overflow: auto; padding: 24px 26px;
+      border-radius: 14px; text-align: center; background: rgba(18,26,40,0.96);
+      border: 1px solid rgba(127,233,255,0.35); box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+    .panel h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: 3px; }
+    .panel h1 span { color: #7fe9ff; }
+    .subtitle { margin: 0 0 6px; opacity: 0.8; font-size: 14px; }
+    .tag { display: inline-block; margin: 6px 0 12px; padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 800; letter-spacing: 1px; background: rgba(255,210,74,0.15);
+      border: 1px solid #ffd24a; color: #ffd24a; }
+    .controls { list-style: none; padding: 0; margin: 0 0 8px; font-size: 13px; text-align: left;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+    .controls b { display: inline-block; min-width: 64px; color: #7fe9ff; }
+    .keys-hint { margin: 0 0 14px; font-size: 12px; opacity: 0.65; }
+    .btn { display: inline-block; padding: 10px 18px; margin: 4px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: 800; font-size: 14px; letter-spacing: 1px; color: #fff;
+      text-decoration: none; background: linear-gradient(90deg, #00b4d8, #7b2ff7); }
+    .btn.ghost { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); }
+    #touch-note { font-size: 13px; color: #ffd24a; margin: 8px 0; }
+  </style>
+</head>
+<body>
+
+
+  <div id="game-container"></div>
+
+
+  <!-- Small info (FPS, position) -->
+  <div id="hud" class="hidden">
+    <div id="hud-title">STRIKE COMMAND</div>
+    <div id="hud-info">FPS 0</div>
+    <div id="hud-mode"></div>
+  </div>
+  <div id="crosshair" class="hidden"></div>
+
+
+  <div id="loading">GENERATING ISLAND...</div>
+
+
+  <!-- Start / pause screen -->
+  <div id="start-screen" class="overlay hidden">
+    <div class="panel">
+      <h1>NOVA STRIKE <span>CAMPAIGN</span></h1>
+      <p class="subtitle">Strike Command Island</p>
+      <div class="tag">UNDER DEVELOPMENT · RTS IN PROGRESS</div>
+
+
+      <!-- the keys in <b data-keys="..."> are filled in by the script at the bottom,
+           so they always show the player's real (rebound) keys -->
+      <ul class="controls">
+        <li><b data-keys="forward,left,back,right">W A S D</b> Move</li>
+        <li><b data-keys="sprint">Shift</b> Sprint</li>
+        <li><b>Mouse</b> Look</li>
+        <li><b data-keys="jump">Space</b> Jump</li>
+        <li><b data-keys="fly">F</b> Fly mode (explore)</li>
+        <li><b data-keys="descend">C</b> Fly down</li>
+        <li><b data-keys="follow">1</b> Squad: Follow me</li>
+        <li><b data-keys="hold">2</b> Squad: Hold</li>
+        <li><b data-keys="attack">3</b> Squad: Go to town (test)</li>
+        <li><b data-keys="interact">E</b> Use / Train (soon)</li>
+        <li><b>N</b> NOVA assistant</li>
+        <li><b>Esc</b> Pause</li>
+      </ul>
+      <p class="keys-hint">Want different keys? Click ⌨ Controls below.</p>
+
+
+      <p id="touch-note" class="hidden">The Campaign map is PC only for now (keyboard and mouse).</p>
+
+
+      <div>
+        <button id="play-btn" class="btn" type="button">▶ ENTER ISLAND</button>
+      </div>
+      <div>
+        <button id="quality-btn" class="btn ghost" type="button">Quality: Medium</button>
+        <a class="btn ghost" href="../index.html">← Back to Hub</a>
+      </div>
+    </div>
+  </div>
+
+
+  <script type="module" src="campaign/main.js"></script>
+
+
+  <!-- keeps the start-screen key list in sync with keybinds.js -->
+  <script type="module">
+    import { key, label, onChange } from './campaign/keybinds.js';
+    function render() {
+      document.querySelectorAll('[data-keys]').forEach((el) => {
+        el.textContent = el.dataset.keys.split(',').map((id) => label(key(id))).join(' ');
+      });
+    }
+    render();
+    onChange(render);
+  </script>
+
+
+  <!-- NOVA assistant for the Campaign (press N). Separate from games/assistant.js -->
+  <script type="module" src="campaign/nova.js"></script>
+</body>
+</html>

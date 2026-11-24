@@ -11,10 +11,39 @@
         /* The modes section is hidden until the Explore button is pressed */
         .games.is-hidden { display: none; }
 
-        /* Three equal cards in one row */
-        .games-grid { grid-template-columns: repeat(3, 1fr); }
-        @media (max-width: 900px) {
+        /* Four cards in one row. Two per row on medium screens, one per row on phones */
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+        @media (max-width: 1399px) {
+            .games-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 700px) {
             .games-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Every card is a column, so its button always sits at the bottom edge */
+        .games-grid .card {
+            display: flex;
+            flex-direction: column;
+        }
+        .games-grid .card .tag {
+            align-self: flex-start;
+        }
+        .games-grid .card p {
+            margin-bottom: 22px;
+        }
+        .games-grid .card .btn {
+            margin-top: auto;
+            align-self: stretch;
+            box-sizing: border-box;
+            text-align: center;
+            white-space: nowrap;
+            padding-left: 14px;
+            padding-right: 14px;
+            font-size: clamp(15px, 1.1vw, 18px);
         }
 
         /* Small line above the big title */
@@ -92,7 +121,7 @@
     <!-- MODES SECTION (hidden until the Explore button is pressed) -->
     <section class="games is-hidden" id="games">
         <h2 class="section-title">Choose Your Mode</h2>
-        <p class="section-sub">Three ways to play NOVA STRIKE 3D</p>
+        <p class="section-sub">Four ways to play NOVA STRIKE 3D</p>
 
         <div class="games-grid">
 
@@ -106,13 +135,21 @@
 
             <!-- Mode 2: War -->
             <div class="card">
-                <span class="tag" style="background: #ff2d95; color: #fff;">🔥 CAMPAIGN</span>
+                <span class="tag" style="background: #ff2d95; color: #fff;">🔥 SQUAD WAR</span>
                 <h3>War Mode</h3>
-                <p>Command a 4-man AI squad through 5 tactical stages and a boss finale.</p>
+                <p>Command a tactical AI squad through multiple combat stages with dynamic difficulty scaling.</p>
                 <a href="games/war.html" class="btn small" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7);">▶ Deploy</a>
             </div>
 
-            <!-- Mode 3: Multiplayer (in development) -->
+            <!-- Mode 3: Campaign (Open World Alpha) -->
+            <div class="card">
+                <span class="tag" style="background: #10b981; color: #fff;">🏝️ OPEN WORLD</span>
+                <h3>Campaign Mode</h3>
+                <p>Explore an open-world island with Strike Command Base, Port Town, Airfield, and road networks.</p>
+                <a href="games/campaign.html" class="btn small" style="background: linear-gradient(90deg, #10b981, #00f0ff); color: #0a0a1a; font-weight: 700;">▶ Enter Island</a>
+            </div>
+
+            <!-- Mode 4: Multiplayer (in development) -->
             <div class="card">
                 <span class="tag" style="background: #7b2ff7; color: #fff;">🚧 IN DEVELOPMENT</span>
                 <h3>Multiplayer</h3>
