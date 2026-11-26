@@ -2,11 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>NOVA STRIKE 3D - Campaign</title>
-
-
-
 
   <script type="importmap">
     {
@@ -17,9 +14,6 @@
     }
   </script>
 
-
-
-
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0f18; color: #fff;
@@ -27,9 +21,6 @@
     .hidden { display: none !important; }
     #game-container { position: fixed; inset: 0; }
     #game-container canvas { display: block; }
-
-
-
 
     /* small on-screen info */
     #hud { position: fixed; left: 12px; top: 10px; z-index: 5; pointer-events: none;
@@ -40,15 +31,9 @@
     #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
       border-radius: 50%; background: rgba(255,255,255,0.8); z-index: 5; pointer-events: none; }
 
-
-
-
     #loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
       justify-content: center; background: #0a0f18; font-weight: 700; letter-spacing: 2px;
       font-size: 18px; color: #7fe9ff; }
-
-
-
 
     .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
       justify-content: center; background: rgba(6,10,18,0.78); }
@@ -70,17 +55,32 @@
       text-decoration: none; background: linear-gradient(90deg, #00b4d8, #7b2ff7); }
     .btn.ghost { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); }
     #touch-note { font-size: 13px; color: #ffd24a; margin: 8px 0; }
+
+    /* phone instructions: hidden on PC, shown only on phones (see the media query below) */
+    #phone-help { display: none; margin: 0 0 8px; font-size: 12px; text-align: left; line-height: 1.35; }
+    #phone-help .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
+    #phone-help b { color: #7fe9ff; }
+    #phone-help .tip { margin-top: 6px; text-align: center; font-size: 11px; color: #ffd24a; }
+
+    /* ---------- PHONE ONLY ---------- */
+    @media (hover: none) and (pointer: coarse) {
+      #phone-help { display: block; }
+      .controls, .keys-hint { display: none; }
+      .overlay { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                          env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      .panel { width: min(94vw, 720px); max-height: 96vh; max-height: 96dvh; padding: 12px 18px; }
+      .panel h1 { font-size: 22px; letter-spacing: 2px; margin: 0 0 2px; }
+      .subtitle { display: none; }
+      .tag { margin: 4px 0 8px; padding: 2px 10px; font-size: 10px; }
+      .btn { padding: 9px 14px; font-size: 13px; margin: 3px; }
+      #play-btn { padding: 12px 30px; font-size: 16px; }
+      #hud { left: calc(10px + env(safe-area-inset-left)); }
+    }
   </style>
 </head>
 <body>
 
-
-
-
   <div id="game-container"></div>
-
-
-
 
   <!-- Small info (FPS, position) -->
   <div id="hud" class="hidden">
@@ -90,13 +90,7 @@
   </div>
   <div id="crosshair" class="hidden"></div>
 
-
-
-
   <div id="loading">GENERATING ISLAND...</div>
-
-
-
 
   <!-- Start / pause screen -->
   <div id="start-screen" class="overlay hidden">
@@ -105,10 +99,7 @@
       <p class="subtitle">Strike Command Island</p>
       <div class="tag">STAGE 1 · PLAYABLE</div>
 
-
-
-
-      <!-- the keys in <b data-keys="..."> are filled in by the script at the bottom,
+      <!-- PC controls. The keys in <b data-keys="..."> are filled in by the script at the bottom,
            so they always show the player's real (rebound) keys.
            If an action is not known yet, the text written here stays. -->
       <ul class="controls">
@@ -131,13 +122,22 @@
       </ul>
       <p class="keys-hint">Want different keys? Click ⌨ Controls below.</p>
 
+      <!-- PHONE controls (shown on phones only) -->
+      <div id="phone-help">
+        <div class="grid">
+          <div><b>Left thumb</b> Move (push far = sprint)</div>
+          <div><b>Right thumb</b> Drag to look around</div>
+          <div><b>FIRE</b> Hold to shoot</div>
+          <div><b>JUMP · RELOAD · SWAP</b> Jump, reload, change gun</div>
+          <div><b>USE</b> Train soldiers at the Barracks</div>
+          <div><b>FOLLOW · HOLD · ATTACK</b> Command your squad</div>
+          <div><b>MAP · NOVA · ❚❚</b> Map, assistant, pause</div>
+          <div><b>Tap anywhere</b> Skips the intro</div>
+        </div>
+        <div class="tip">Hold your phone sideways (landscape) for the best view.</div>
+      </div>
 
-
-
-      <p id="touch-note" class="hidden">The Campaign map is PC only for now (keyboard and mouse).</p>
-
-
-
+      <p id="touch-note" class="hidden">Touch controls need a phone or tablet. On this screen, use the keyboard and mouse.</p>
 
       <div>
         <button id="play-btn" class="btn" type="button">▶ ENTER ISLAND</button>
@@ -150,13 +150,15 @@
     </div>
   </div>
 
-
-
-
   <script type="module" src="campaign/main.js"></script>
 
-
-
+  <!-- PHONE ONLY: load the touch controls. On PC (or a laptop with a mouse) this file is never loaded. -->
+  <script type="module">
+    const phone = window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (phone) {
+      import('./campaign/touch.js').catch((err) => console.warn('[touch] could not load touch.js', err));
+    }
+  </script>
 
   <!-- keeps the start-screen key list in sync with keybinds.js -->
   <script type="module">
@@ -178,9 +180,6 @@
     render();
     onChange(render);
   </script>
-
-
-
 
   <!-- NOVA assistant for the Campaign (press N). Separate from games/assistant.js -->
   <script type="module" src="campaign/nova.js"></script>
