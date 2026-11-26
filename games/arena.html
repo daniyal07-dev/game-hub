@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="arena.css">
 
 
+
   <script type="importmap">
     {
       "imports": {
@@ -18,13 +19,16 @@
 <body>
 
 
+
   <div id="game-container"></div>
   <div id="damage-flash"></div>
+
 
 
   <!-- In-game interface -->
   <div id="crosshair" class="game-ui"></div>
   <div id="hitmarker" class="game-ui"></div>
+
 
 
   <div id="wave-info" class="game-ui">
@@ -33,13 +37,16 @@
   </div>
 
 
+
   <div id="squad-alert" class="game-ui"></div>
+
 
 
   <div id="wave-banner" class="game-ui">
     <div id="banner-title"></div>
     <div id="banner-sub"></div>
   </div>
+
 
 
   <div id="hud" class="game-ui">
@@ -52,9 +59,11 @@
     </div>
 
 
+
     <div id="score-box">
       SCORE <span id="score">0</span>
     </div>
+
 
 
     <div id="ammo-box">
@@ -63,7 +72,9 @@
   </div>
 
 
+
   <div id="reload-msg" class="game-ui">RELOADING...</div>
+
 
 
   <!-- TOUCH CONTROLS (phones only, shown by arena.js) -->
@@ -79,11 +90,13 @@
   </div>
 
 
+
   <!-- Shown on phones held upright -->
   <div id="rotate-msg">
     <div class="rot-icon">📱↻</div>
     <div>Rotate your phone to landscape</div>
   </div>
+
 
 
   <!-- Start screen -->
@@ -94,6 +107,7 @@
       <p class="best-line">
         Best score: <span id="best-start">0</span>
       </p>
+
 
 
       <ul class="controls" id="pc-controls">
@@ -107,6 +121,7 @@
       </ul>
 
 
+
       <ul class="controls hidden" id="touch-controls">
         <li><b>Left thumb</b> Joystick to move (push far = sprint)</li>
         <li><b>Right thumb</b> Drag to look</li>
@@ -117,6 +132,7 @@
       </ul>
 
 
+
       <!-- Side-by-side Play Arena and War Mode buttons -->
       <div style="margin-bottom: 16px;">
         <button id="play-btn" class="btn">▶ PLAY ARENA</button>
@@ -124,9 +140,11 @@
       </div>
 
 
+
       <p id="war-pc-note" class="hidden" style="font-size:12px; opacity:0.7; margin:-6px 0 14px;">
         War Mode is best on PC (keyboard and mouse).
       </p>
+
 
 
       <div class="btn-row">
@@ -147,13 +165,16 @@
   </div>
 
 
+
   <!-- Pause screen -->
   <div id="pause-screen" class="overlay hidden">
     <div class="panel">
       <h2>PAUSED</h2>
 
 
+
       <button id="resume-btn" class="btn">▶ RESUME</button>
+
 
 
       <div class="btn-row">
@@ -168,10 +189,12 @@
   </div>
 
 
+
   <!-- Settings screen -->
   <div id="settings-screen" class="overlay hidden">
     <div class="panel">
       <h2>SETTINGS</h2>
+
 
 
       <div class="setting-row">
@@ -187,6 +210,7 @@
       </div>
 
 
+
       <div class="setting-row">
         <label for="vol-sfx">Effects Volume</label>
         <input
@@ -198,6 +222,7 @@
         >
         <span id="vol-sfx-val">80%</span>
       </div>
+
 
 
       <div class="setting-row">
@@ -213,6 +238,7 @@
       </div>
 
 
+
       <div class="setting-row">
         <label for="sens">Mouse Sensitivity</label>
         <input
@@ -224,6 +250,7 @@
         >
         <span id="sens-val">1.0x</span>
       </div>
+
 
 
       <div class="btn-row">
@@ -238,15 +265,18 @@
   </div>
 
 
+
   <!-- Game over screen -->
   <div id="gameover-screen" class="overlay hidden">
     <div class="panel">
       <h2 class="danger">GAME OVER</h2>
 
 
+
       <p id="new-record" class="record hidden">
         🏆 NEW RECORD!
       </p>
+
 
 
       <div class="stats">
@@ -256,9 +286,11 @@
       </div>
 
 
+
       <button id="restart-btn" class="btn">
         ↻ PLAY AGAIN
       </button>
+
 
 
       <div class="btn-row">
@@ -274,6 +306,12 @@
       </div>
     </div>
   </div>
+
+
+
+  <!-- Phones only: first tap re-enters fullscreen + landscape (does nothing on PC) -->
+  <script src="../js/phone-fs.js"></script>
+
 
 
   <script type="module" src="arena.js"></script>

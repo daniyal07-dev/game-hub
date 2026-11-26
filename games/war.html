@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="war.css">
 
 
+
   <style>
     /* Boss Fight button (start screen) */
     #boss-btn {
@@ -39,6 +40,7 @@
     }
 
 
+
     /* Phone-only how-to-play line (hidden on PC) */
     .phone-help { display: none; }
     @media (pointer: coarse) {
@@ -56,6 +58,7 @@
   </style>
 
 
+
   <script type="importmap">
     {
       "imports": {
@@ -68,13 +71,16 @@
 <body>
 
 
+
   <div id="game-container"></div>
   <div id="damage-flash"></div>
+
 
 
   <!-- In-game interface -->
   <div id="crosshair" class="game-ui"></div>
   <div id="hitmarker" class="game-ui"></div>
+
 
 
   <!-- Stage + objective (top centre) -->
@@ -84,7 +90,9 @@
   </div>
 
 
+
   <div id="squad-alert" class="game-ui"></div>
+
 
 
   <div id="wave-banner" class="game-ui">
@@ -93,11 +101,13 @@
   </div>
 
 
+
   <!-- Commander messages (NOVA briefings) -->
   <div id="comms" class="game-ui">
     <div id="comms-name">COMMAND</div>
     <div id="comms-text"></div>
   </div>
+
 
 
   <!-- Team panel (top left) -->
@@ -127,10 +137,12 @@
   </div>
 
 
+
   <!-- Radar (right side) -->
   <div id="radar-box" class="game-ui">
     <canvas id="radar" width="180" height="180"></canvas>
   </div>
+
 
 
   <!-- Objective tracker -->
@@ -138,6 +150,7 @@
     <div id="objective-title">OBJECTIVE</div>
     <div id="objective-text">-</div>
   </div>
+
 
 
   <!-- Main HUD (bottom) -->
@@ -151,9 +164,11 @@
     </div>
 
 
+
     <div id="score-box">
       SCORE <span id="score">0</span>
     </div>
+
 
 
     <div id="ammo-box">
@@ -164,6 +179,7 @@
   </div>
 
 
+
   <div id="weapon-bar" class="game-ui">
     <div class="weapon-slot" id="slot1"><b>1</b> Pistol</div>
     <div class="weapon-slot" id="slot2"><b>2</b> Rifle</div>
@@ -171,7 +187,9 @@
   </div>
 
 
+
   <div id="reload-msg" class="game-ui">RELOADING...</div>
+
 
 
   <!-- Start screen: mission select -->
@@ -181,12 +199,15 @@
       <p class="subtitle">Lead your squad through 5 stages</p>
 
 
+
       <div id="stage-list"></div>
+
 
 
       <p class="best-line">
         Selected: <span id="selected-stage">Stage 1</span>
       </p>
+
 
 
       <ul class="controls">
@@ -204,20 +225,25 @@
       </ul>
 
 
+
       <!-- Phones only -->
       <p class="phone-help">
         <b>Left thumb</b> move (push far to sprint) · <b>Swipe right side</b> look
+
 
         <b>FIRE</b> shoot · <b>GUN</b> change weapon · <b>ORDER</b> squad command · 💣 grenade
       </p>
 
 
+
       <button id="play-btn" class="btn">▶ DEPLOY</button>
+
 
 
       <!-- Boss Fight: locked until Stage 1 is cleared -->
       <button id="boss-btn" class="btn locked" disabled>🔒 BOSS FIGHT</button>
       <p id="boss-hint">Clear Stage 1 to unlock the Boss Fight</p>
+
 
 
       <div class="btn-row">
@@ -231,13 +257,16 @@
   </div>
 
 
+
   <!-- Pause screen -->
   <div id="pause-screen" class="overlay hidden">
     <div class="panel">
       <h2>PAUSED</h2>
 
 
+
       <button id="resume-btn" class="btn">▶ RESUME</button>
+
 
 
       <div class="btn-row">
@@ -248,10 +277,12 @@
   </div>
 
 
+
   <!-- Settings screen -->
   <div id="settings-screen" class="overlay hidden">
     <div class="panel">
       <h2>SETTINGS</h2>
+
 
 
       <div class="setting-row">
@@ -261,11 +292,13 @@
       </div>
 
 
+
       <div class="setting-row">
         <label for="vol-sfx">Effects Volume</label>
         <input type="range" id="vol-sfx" min="0" max="100" step="1">
         <span id="vol-sfx-val">80%</span>
       </div>
+
 
 
       <div class="setting-row">
@@ -275,11 +308,13 @@
       </div>
 
 
+
       <div class="setting-row">
         <label for="sens">Mouse Sensitivity</label>
         <input type="range" id="sens" min="0.3" max="2.5" step="0.1">
         <span id="sens-val">1.0x</span>
       </div>
+
 
 
       <div class="btn-row">
@@ -290,11 +325,13 @@
   </div>
 
 
+
   <!-- Stage complete screen -->
   <div id="result-screen" class="overlay hidden">
     <div class="panel">
       <h2 id="result-title">STAGE COMPLETE</h2>
       <div id="result-stars">★★★</div>
+
 
 
       <div class="stats">
@@ -305,7 +342,9 @@
       </div>
 
 
+
       <button id="next-btn" class="btn">▶ NEXT STAGE</button>
+
 
 
       <div class="btn-row">
@@ -316,10 +355,12 @@
   </div>
 
 
+
   <!-- Mission failed screen -->
   <div id="gameover-screen" class="overlay hidden">
     <div class="panel">
       <h2 class="danger">MISSION FAILED</h2>
+
 
 
       <div class="stats">
@@ -329,7 +370,9 @@
       </div>
 
 
+
       <button id="restart-btn" class="btn">↻ TRY AGAIN</button>
+
 
 
       <div class="btn-row">
@@ -338,6 +381,12 @@
       </div>
     </div>
   </div>
+
+
+
+  <!-- Phones only: first tap re-enters fullscreen + landscape (does nothing on PC) -->
+  <script src="../js/phone-fs.js"></script>
+
 
 
   <script type="module" src="war/main.js"></script>

@@ -1,7 +1,8 @@
-// js/phone-fs.js
-// Phones only: the first tap on the front door (play.html) opens fullscreen
-// and locks the screen to landscape. PC is never touched.
-//  - Android Chrome: fullscreen + landscape lock.
+// js/phone-fs.js  (v2)
+// Phones only: the first tap on a page opens fullscreen and locks landscape.
+// Linked in play.html and every game page. PC is never touched.
+//  - Android Chrome: fullscreen + landscape lock (browsers drop fullscreen on every
+//    page change, so each game page re-enters it on its first tap).
 //  - iPhone: not possible in Safari, so a one-time "Add to Home Screen" tip is shown.
 
 (function () {
@@ -14,11 +15,16 @@
   const STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) ||
                      window.navigator.standalone === true;
   const TIP_KEY = 'nova_ios_tip';
+  const OFF_KEY = 'nova_fs_off';        // sessionStorage: the player left fullscreen on purpose
 
   const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  let done = false;       // fullscreen reached
-  let gaveUp = false;     // the player left fullscreen on purpose
+  const canFull = !!(de.requestFullscreen || de.webkitRequestFullscreen);
+
+  let done = false;       // fullscreen reached on this page
+  let leaving = false;    // this page is closing (a page change also ends fullscreen)
   let busy = false;
+  let gaveUp = false;
+  try { gaveUp = sessionStorage.getItem(OFF_KEY) === '1'; } catch (e) {}
 
   function lockLandscape() {
     try {
@@ -29,10 +35,9 @@
   }
 
   function goFull() {
-    if (done || gaveUp || busy || STANDALONE) return;
+    if (done || gaveUp || busy || STANDALONE || !canFull) return;
     if (isFull()) { done = true; lockLandscape(); return; }
     const req = de.requestFullscreen || de.webkitRequestFullscreen;
-    if (!req) return;                       // iPhone: no fullscreen for pages
     busy = true;
     let p;
     try { p = req.call(de, { navigationUI: 'hide' }); } catch (e) { p = null; }
@@ -41,17 +46,23 @@
     if (p && p.then) p.then(ok, fail); else setTimeout(() => (isFull() ? ok() : fail()), 300);
   }
 
+  window.addEventListener('pagehide', () => { leaving = true; });
+  window.addEventListener('beforeunload', () => { leaving = true; });
+
   function onFsChange() {
-    if (isFull()) { done = true; lockLandscape(); }
-    else if (done) { done = false; gaveUp = true; }   // the player exited: do not nag
+    if (isFull()) { done = true; lockLandscape(); return; }
+    if (done && !leaving) {                 // the player exited on purpose: do not nag
+      done = false; gaveUp = true;
+      try { sessionStorage.setItem(OFF_KEY, '1'); } catch (e) {}
+    }
   }
   document.addEventListener('fullscreenchange', onFsChange);
   document.addEventListener('webkitfullscreenchange', onFsChange);
 
-  // first real taps (capture, so nothing can stop them before us)
+  // taps (capture, so nothing can stop them before us)
   const gesture = () => {
     goFull();
-    if (done || gaveUp || !(de.requestFullscreen || de.webkitRequestFullscreen)) {
+    if (done || gaveUp || !canFull) {
       window.removeEventListener('pointerup', gesture, true);
       window.removeEventListener('click', gesture, true);
     }
