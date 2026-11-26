@@ -1,220 +1,564 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Hub | NOVA STRIKE 3D</title>
-    <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOVA STRIKE 3D | Stage 1</title>
+<meta name="description" content="NOVA STRIKE 3D: command a squad, fight AI enemies and take back an island. Free, in your browser.">
+<script>document.documentElement.classList.add('js');</script>
+<style>
+:root{--ac:#38b6ff;--acr:56,182,255;--bg:#02060f;--txt:#eaf3ff;--mut:#9fb6cf}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif;overflow-x:hidden;line-height:1.5}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
 
-    <!-- Small extra styles for this page only -->
-    <style>
-        /* The modes section is hidden until the Explore button is pressed */
-        .games.is-hidden { display: none; }
 
-        /* Four cards in one row. Two per row on medium screens, one per row on phones */
-        .games-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-        }
-        @media (max-width: 1399px) {
-            .games-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 700px) {
-            .games-grid { grid-template-columns: 1fr; }
-        }
+/* ---------- navbar ---------- */
+nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(14px,4vw,48px);background:rgba(2,6,15,.72);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid rgba(var(--acr),.16)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.14em;font-size:clamp(15px,2vw,20px)}
+.brand i{font-style:normal;color:var(--ac);filter:drop-shadow(0 0 8px var(--ac))}
+.brand b{color:var(--ac)}
+.links{display:flex;align-items:center;gap:clamp(10px,2.4vw,30px)}
+.links a.l{color:var(--mut);font-weight:600;font-size:15px;transition:color .2s}
+.links a.l:hover{color:#fff}
+#music-btn{display:flex;align-items:center;gap:7px;background:rgba(var(--acr),.08);border:1px solid rgba(var(--acr),.35);border-radius:999px;padding:7px 13px;cursor:pointer;font-size:12px;letter-spacing:.14em;font-weight:700;transition:background .2s,box-shadow .2s}
+#music-btn:hover{background:rgba(var(--acr),.2);box-shadow:0 0 16px rgba(var(--acr),.4)}
+#music-btn.on #mi{animation:eq 1s ease-in-out infinite}
+@keyframes eq{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+.navplay{background:linear-gradient(90deg,#1a6fe0,var(--ac));color:#021226;font-weight:800;letter-spacing:.14em;font-size:12px;padding:9px 16px;border-radius:999px;transition:box-shadow .2s,transform .2s}
+.navplay:hover{box-shadow:0 0 22px rgba(var(--acr),.7);transform:translateY(-1px)}
+@media(max-width:720px){.links a.l{display:none}#music-btn .lbl{display:none}}
 
-        /* Every card is a column, so its button always sits at the bottom edge */
-        .games-grid .card {
-            display: flex;
-            flex-direction: column;
-        }
-        .games-grid .card .tag {
-            align-self: flex-start;
-        }
-        .games-grid .card p {
-            margin-bottom: 22px;
-        }
-        .games-grid .card .btn {
-            margin-top: auto;
-            align-self: stretch;
-            box-sizing: border-box;
-            text-align: center;
-            white-space: nowrap;
-            padding-left: 14px;
-            padding-right: 14px;
-            font-size: clamp(15px, 1.1vw, 18px);
-        }
 
-        /* Small line above the big title */
-        .hero-kicker {
-            letter-spacing: 6px; font-size: 0.95rem; font-weight: 700;
-            color: #9a9ac0; margin-bottom: 14px; text-transform: uppercase;
-        }
+/* ---------- hero ---------- */
+.hero{position:relative;min-height:calc(100vh - 62px);display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;padding:60px 18px 90px;
+  background:radial-gradient(ellipse at calc(50% + var(--gx,0px)) calc(40% + var(--gy,0px)),rgba(30,110,255,.28),rgba(2,6,15,0) 60%),linear-gradient(180deg,#02060f,#040d24 70%,#06193d)}
+#fx{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 50%,rgba(0,0,0,.6) 100%)}
+.hero-in{position:relative;z-index:2;max-width:980px}
+.stage{display:inline-flex;align-items:center;gap:10px;margin-bottom:18px;padding:7px 18px;border-radius:999px;border:1px solid rgba(var(--acr),.6);background:rgba(var(--acr),.1);font-size:12px;font-weight:800;letter-spacing:.32em;color:#d8ecff;animation:stg 3s ease-in-out infinite}
+.stage i{display:block;width:8px;height:8px;border-radius:50%;background:var(--ac);box-shadow:0 0 10px var(--ac)}
+@keyframes stg{0%,100%{box-shadow:0 0 10px rgba(var(--acr),.3)}50%{box-shadow:0 0 26px rgba(var(--acr),.8)}}
+.kicker{letter-spacing:.5em;font-size:clamp(10px,1.4vw,14px);color:var(--mut);text-transform:uppercase}
+.title{margin:14px 0 6px;font-size:clamp(40px,10.5vw,138px);line-height:1;font-weight:900;letter-spacing:.05em;
+  background:linear-gradient(100deg,#fff 20%,#9fdcff 38%,#fff 50%,#38b6ff 62%,#1e6fff 80%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shine 5s linear infinite,glow 3.6s ease-in-out infinite}
+@keyframes shine{from{background-position:120% 0}to{background-position:-100% 0}}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 14px rgba(var(--acr),.35))}50%{filter:drop-shadow(0 0 36px rgba(var(--acr),.85))}}
+.tag{height:1.6em;margin-top:8px;font-size:clamp(16px,2.4vw,26px);color:#cfe3fa;font-weight:600;letter-spacing:.06em}
+.tag span{border-right:2px solid var(--ac);padding-right:4px;animation:caret .8s steps(1) infinite}
+@keyframes caret{50%{border-color:transparent}}
+.sub{max-width:640px;margin:14px auto 0;color:var(--mut);font-size:clamp(14px,1.6vw,18px)}
+.cta{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:34px}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:16px 34px;border-radius:14px;font-weight:900;letter-spacing:.2em;font-size:15px;cursor:pointer;transition:transform .2s,box-shadow .2s,background .2s}
+.btn.p{background:linear-gradient(90deg,#1a6fe0,var(--ac));color:#021226;position:relative;animation:ring 2.4s ease-out infinite}
+.btn.p:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 0 40px rgba(var(--acr),.75)}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(var(--acr),.55)}70%,100%{box-shadow:0 0 0 22px rgba(var(--acr),0)}}
+.btn.s{border:1px solid rgba(var(--acr),.5);background:rgba(var(--acr),.06)}
+.btn.s:hover{background:rgba(var(--acr),.18);transform:translateY(-3px)}
+.stats{display:flex;flex-wrap:wrap;gap:clamp(18px,5vw,64px);justify-content:center;margin-top:54px}
+.stat b{display:block;font-size:clamp(26px,4vw,42px);color:var(--ac);text-shadow:0 0 20px rgba(var(--acr),.6)}
+.stat span{font-size:12px;letter-spacing:.22em;color:var(--mut);text-transform:uppercase}
+.scrollhint{position:absolute;left:50%;bottom:22px;z-index:2;transform:translateX(-50%);color:var(--mut);font-size:11px;letter-spacing:.3em;animation:bob 1.8s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
 
-        /* Line under the section heading */
-        .section-sub {
-            text-align: center; color: #9a9ac0;
-            margin: -10px 0 30px; font-size: 1.05rem; letter-spacing: 1px;
-        }
 
-        /* Small message shown by the Multiplayer button */
-        #mp-toast {
-            position: fixed; left: 50%; bottom: 40px;
-            transform: translate(-50%, 20px);
-            background: #1b1446; color: #fff;
-            border: 1px solid #00f0ff; border-radius: 12px;
-            padding: 14px 24px; font-size: 15px;
-            box-shadow: 0 0 24px rgba(0, 240, 255, 0.35);
-            opacity: 0; pointer-events: none;
-            transition: opacity 0.3s, transform 0.3s; z-index: 50;
-        }
-        #mp-toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* ---------- sections ---------- */
+section{position:relative;padding:clamp(60px,10vw,110px) clamp(16px,5vw,60px)}
+.wrap{max-width:1180px;margin:0 auto}
+.sk{letter-spacing:.45em;font-size:12px;color:var(--ac);text-transform:uppercase;text-align:center}
+h2{text-align:center;font-size:clamp(28px,5vw,52px);font-weight:900;letter-spacing:.1em;margin:10px 0 14px;text-transform:uppercase}
+.lead{max-width:640px;margin:0 auto 44px;text-align:center;color:var(--mut)}
+.js .rv{opacity:0;transform:translateY(28px);transition:opacity .8s ease,transform .8s ease}
+.js .rv.in{opacity:1;transform:none}
 
-        /* Phone / tablet notice: hidden everywhere except touch devices */
-        #phone-notice {
-            display: none;
-            align-items: center; justify-content: center; gap: 12px;
-            background: #1b1446; color: #fff;
-            border-bottom: 1px solid #00f0ff;
-            padding: 12px 14px; font-size: 14px; line-height: 1.5;
-            text-align: center;
-        }
-        #phone-notice a { color: #00f0ff; font-weight: 700; text-decoration: underline; }
-        #phone-notice button {
-            background: transparent; color: #fff; border: 1px solid #00f0ff;
-            border-radius: 8px; padding: 2px 10px; font-size: 14px; cursor: pointer;
-            flex-shrink: 0;
-        }
-        @media (pointer: coarse) {
-            #phone-notice { display: flex; }
-        }
-        #phone-notice.closed { display: none !important; }
-    </style>
+
+/* featured poster */
+.feat{background:linear-gradient(180deg,#040d24,#02060f)}
+.poster-wrap{perspective:1100px;max-width:980px;margin:0 auto}
+.poster{display:block;position:relative;aspect-ratio:16/9;border-radius:20px;overflow:hidden;border:1px solid rgba(var(--acr),.5);background:radial-gradient(circle at 50% 40%,#0b2b6b,#02060f);transition:transform .15s ease-out,box-shadow .3s;box-shadow:0 0 60px rgba(var(--acr),.3),0 30px 80px rgba(0,0,0,.6);transform-style:preserve-3d}
+.poster:hover{box-shadow:0 0 90px rgba(var(--acr),.55),0 30px 80px rgba(0,0,0,.6)}
+.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.poster:before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.28) 50%,transparent 60%);background-size:260% 100%;background-position:150% 0;animation:sweep 6s ease-in-out infinite}
+@keyframes sweep{0%{background-position:150% 0}45%,100%{background-position:-60% 0}}
+.poster .go{position:absolute;right:18px;bottom:18px;z-index:3;background:linear-gradient(90deg,#1a6fe0,var(--ac));color:#021226;font-weight:900;letter-spacing:.2em;font-size:13px;padding:12px 22px;border-radius:12px;box-shadow:0 0 26px rgba(var(--acr),.7);animation:ring 2.4s ease-out infinite}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-top:44px}
+.mode{position:relative;display:block;padding:26px 24px;border-radius:16px;background:rgba(8,18,38,.8);border:1px solid rgba(var(--acr),.18);overflow:hidden;transition:transform .25s,box-shadow .25s,border-color .25s}
+.mode:before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:var(--c)}
+.mode:hover{transform:translateY(-8px);border-color:var(--c);box-shadow:0 14px 44px rgba(0,0,0,.5),0 0 32px var(--g)}
+.mode .ic{font-size:34px;margin-bottom:10px}
+.mode h3{letter-spacing:.18em;font-size:18px;margin-bottom:8px}
+.mode p{color:var(--mut);font-size:14px}
+.mode .tg{display:inline-block;margin-top:14px;font-size:11px;letter-spacing:.2em;color:var(--c);font-weight:800}
+
+
+/* features */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.card{padding:24px;border-radius:16px;background:linear-gradient(160deg,rgba(14,34,70,.7),rgba(6,12,26,.85));border:1px solid rgba(var(--acr),.16);transition:transform .25s,border-color .25s,box-shadow .25s}
+.card:hover{transform:translateY(-6px);border-color:rgba(var(--acr),.6);box-shadow:0 0 30px rgba(var(--acr),.25)}
+.card .ic{font-size:30px;margin-bottom:10px}
+.card h3{font-size:16px;letter-spacing:.14em;margin-bottom:6px;color:#fff}
+.card p{font-size:14px;color:var(--mut)}
+
+
+/* mission strip */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;counter-reset:s;position:relative}
+.step{position:relative;padding:22px 20px;border-radius:14px;background:rgba(8,18,38,.7);border:1px solid rgba(var(--acr),.18);text-align:center}
+.step:before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:44px;height:44px;margin:0 auto 12px;border-radius:50%;border:2px solid var(--ac);color:var(--ac);font-weight:900;box-shadow:0 0 18px rgba(var(--acr),.5)}
+.step h4{letter-spacing:.2em;margin-bottom:6px}
+.step p{font-size:13px;color:var(--mut)}
+
+
+/* more games */
+.more .modes{margin-top:0}
+.mini{--c:#19e0ff;--g:rgba(25,224,255,.35)}
+
+
+/* footer */
+footer{padding:36px 16px 46px;text-align:center;color:var(--mut);font-size:13px;border-top:1px solid rgba(var(--acr),.14);background:#01040a}
+footer b{color:var(--ac)}
+
+
+/* music hint */
+#hint{position:fixed;left:16px;bottom:16px;z-index:60;padding:10px 16px;border-radius:999px;background:rgba(0,10,28,.85);border:1px solid rgba(var(--acr),.5);color:#cfe8ff;font-size:13px;box-shadow:0 0 22px rgba(var(--acr),.35);opacity:0;pointer-events:none;transition:opacity .5s}
+#hint.show{opacity:1}
+
+
+@media(prefers-reduced-motion:reduce){.title,.btn.p,.poster:before,.poster .go,.scrollhint,.tag span,.stage{animation:none}.js .rv{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+</style>
 </head>
-<body>
+<body id="top">
 
-    <!-- PHONE NOTICE (only shows on touch devices) -->
-    <div id="phone-notice">
-        <span>📱 <strong>Arena Mode</strong> and <strong>War Mode</strong> both work on phones with touch controls. Play in landscape for the best view. More fun games are in <a href="more-games.html">More Games</a>!</span>
-        <button type="button" id="phone-notice-close" aria-label="Close">✕</button>
+
+<nav>
+  <a class="brand" href="#top"><i>▶</i>NOVA <b>STRIKE</b> 3D</a>
+  <div class="links">
+    <a class="l" href="#top">Home</a>
+    <a class="l" href="#featured">Featured</a>
+    <a class="l" href="#built">How it's built</a>
+    <a class="l" href="#more">More Games</a>
+    <button id="music-btn" type="button" aria-label="Music on or off"><span id="mi">🔇</span><span class="lbl">MUSIC</span></button>
+    <a class="navplay" href="play.html">PLAY NOW</a>
+  </div>
+</nav>
+
+
+<header class="hero" id="hero">
+  <canvas id="fx"></canvas>
+  <div class="hero-in">
+    <div class="stage"><i></i>STAGE 1</div>
+    <div class="kicker">Tactical AI Combat · In your browser</div>
+    <h1 class="title">NOVA STRIKE 3D</h1>
+    <div class="tag"><span id="typed"></span></div>
+    <p class="sub">Command a squad, fight AI enemies and take back an island. One game, three battlefields, built from scratch and free to play.</p>
+    <div class="cta">
+      <a class="btn p" href="play.html">▶ PLAY NOW</a>
+      <a class="btn s" href="#featured">SEE THE MODES</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><b data-count="3">3</b><span>Game modes</span></div>
+      <div class="stat"><b>AI</b><span>Smart soldiers</span></div>
+      <div class="stat"><b data-count="100" data-suf="%">100%</b><span>Free to play</span></div>
+      <div class="stat"><b data-count="0">0</b><span>Downloads</span></div>
+    </div>
+  </div>
+  <div class="scrollhint">SCROLL ▾</div>
+</header>
+
+
+<section class="feat" id="featured">
+  <div class="wrap">
+    <div class="sk rv">Featured game</div>
+    <h2 class="rv">Strike Command</h2>
+    <p class="lead rv">Train soldiers, clear Port Town, capture the square and defend it from the sea. A real-time strategy game, played in first person.</p>
+
+
+    <div class="poster-wrap rv">
+      <a class="poster" id="poster" href="play.html" aria-label="Play NOVA STRIKE 3D">
+        <img src="games/campaign/menu.jpeg" alt="NOVA STRIKE 3D title art" onerror="this.style.display='none'">
+        <span class="go">▶ PLAY NOW</span>
+      </a>
     </div>
 
-    <!-- NAVBAR: the bar at the top -->
-    <header class="navbar">
-        <div class="logo"><span class="logo-icon">▶</span>GAME<span class="logo-accent">HUB</span></div>
-        <nav>
-            <a href="index.html">Home</a>
-            <a href="#games">Games</a>
-            <a href="more-games.html">More Games</a>
-        </nav>
-    </header>
 
-    <!-- HERO: the big welcome section -->
-    <section class="hero">
-        <div class="hero-kicker">Tactical AI Combat</div>
-        <h1><span class="glow">NOVA STRIKE 3D</span></h1>
-        <p>The flagship game of Game Hub. Fight AI enemies, command a squad, or battle real players, all in your browser.</p>
-        <a href="#games" class="btn">Explore NOVA STRIKE 3D</a>
-    </section>
+    <div class="modes">
+      <a class="mode rv" href="play.html" style="--c:#38b6ff;--g:rgba(56,182,255,.35)">
+        <div class="ic">🎖️</div><h3>CAMPAIGN</h3>
+        <p>Strike Command: train your squad, give orders and take the town back from the Space Gang.</p>
+        <span class="tg">OPEN-WORLD RTS →</span>
+      </a>
+      <a class="mode rv" href="play.html" style="--c:#7a8cff;--g:rgba(122,140,255,.35)">
+        <div class="ic">🚁</div><h3>WAR MODE</h3>
+        <p>Fast squad combat against soldiers, drones and giant mechs.</p>
+        <span class="tg">SQUAD COMBAT →</span>
+      </a>
+      <a class="mode rv" href="play.html" style="--c:#19e0ff;--g:rgba(25,224,255,.35)">
+        <div class="ic">🎯</div><h3>ARENA MODE</h3>
+        <p>Survive wave after wave of AI enemies and beat your own score.</p>
+        <span class="tg">SURVIVAL →</span>
+      </a>
+    </div>
+  </div>
+</section>
 
-    <!-- MODES SECTION (hidden until the Explore button is pressed) -->
-    <section class="games is-hidden" id="games">
-        <h2 class="section-title">Choose Your Mode</h2>
-        <p class="section-sub">Four ways to play NOVA STRIKE 3D</p>
 
-        <div class="games-grid">
+<section id="built" style="background:linear-gradient(180deg,#02060f,#040d24)">
+  <div class="wrap">
+    <div class="sk rv">Under the hood</div>
+    <h2 class="rv">Built from scratch</h2>
+    <p class="lead rv">Almost everything you see and hear is made by code, not downloaded.</p>
+    <div class="grid">
+      <div class="card rv"><div class="ic">🧭</div><h3>SMART PATHFINDING</h3><p>Your soldiers find their way around walls, trees and buildings using A* pathfinding on a grid.</p></div>
+      <div class="card rv"><div class="ic">🧠</div><h3>ENEMY AI</h3><p>Enemies guard, spot you, fight, search and return to their posts. Three difficulty levels.</p></div>
+      <div class="card rv"><div class="ic">🤖</div><h3>OFFLINE AI ASSISTANT</h3><p>Press <b>T</b> on this page to ask questions. It works offline, with no account and no key.</p></div>
+      <div class="card rv"><div class="ic">🎵</div><h3>MUSIC MADE BY CODE</h3><p>The themes and most sounds are generated live with the Web Audio API. No audio files.</p></div>
+      <div class="card rv"><div class="ic">🧱</div><h3>REAL COLLISION</h3><p>You cannot walk through walls or trees, and neither can your soldiers.</p></div>
+      <div class="card rv"><div class="ic">💸</div><h3>100% FREE</h3><p>Free tools, free CC0 models and free hosting. Nothing to install and nothing to pay.</p></div>
+    </div>
+  </div>
+</section>
 
-            <!-- Mode 1: Arena -->
-            <div class="card">
-                <span class="tag">⭐ SURVIVAL</span>
-                <h3>Arena Mode</h3>
-                <p>Survive waves of AI-controlled enemies in a full 3D arena, with sound, menus and an in-game AI assistant.</p>
-                <a href="games/arena.html" class="btn small">▶ Play Arena Mode</a>
-            </div>
 
-            <!-- Mode 2: War -->
-            <div class="card">
-                <span class="tag" style="background: #ff2d95; color: #fff;">🔥 SQUAD WAR</span>
-                <h3>War Mode</h3>
-                <p>Command a tactical AI squad through multiple combat stages with dynamic difficulty scaling.</p>
-                <a href="games/war.html" class="btn small" style="background: linear-gradient(90deg, #ff2d95, #7b2ff7);">▶ Deploy</a>
-            </div>
+<section>
+  <div class="wrap">
+    <div class="sk rv">The mission</div>
+    <h2 class="rv">Take back Port Town</h2>
+    <p class="lead rv">Four steps from the barracks to victory.</p>
+    <div class="steps">
+      <div class="step rv"><h4>TRAIN</h4><p>Train your first soldier at the barracks.</p></div>
+      <div class="step rv"><h4>CLEAR</h4><p>Lead the squad in and clear the town.</p></div>
+      <div class="step rv"><h4>CAPTURE</h4><p>Hold the town square until it is yours.</p></div>
+      <div class="step rv"><h4>DEFEND</h4><p>Survive three waves from the sea.</p></div>
+    </div>
+    <div class="cta rv" style="margin-top:44px"><a class="btn p" href="play.html">▶ START THE MISSION</a></div>
+  </div>
+</section>
 
-            <!-- Mode 3: Campaign (Open World Alpha) -->
-            <div class="card">
-                <span class="tag" style="background: #10b981; color: #fff;">🏝️ OPEN WORLD</span>
-                <h3>Campaign Mode</h3>
-                <p>Explore an open-world island with Strike Command Base, Port Town, Airfield, and road networks.</p>
-                <a href="games/campaign.html" class="btn small" style="background: linear-gradient(90deg, #10b981, #00f0ff); color: #0a0a1a; font-weight: 700;">▶ Enter Island</a>
-            </div>
 
-            <!-- Mode 4: Multiplayer (in development) -->
-            <div class="card">
-                <span class="tag" style="background: #7b2ff7; color: #fff;">🚧 IN DEVELOPMENT</span>
-                <h3>Multiplayer</h3>
-                <p>Real online players instead of AI. Battle in 1v1, 2v2, 3v3 or 4v4 teams.</p>
-                <a href="#" class="btn small" id="mp-btn" style="background: linear-gradient(90deg, #00f0ff, #7b2ff7); color: #fff;">🌐 Coming Soon</a>
-            </div>
+<section class="more" id="more" style="background:linear-gradient(180deg,#02060f,#040d24)">
+  <div class="wrap">
+    <div class="sk rv">Quick breaks</div>
+    <h2 class="rv">More games</h2>
+    <p class="lead rv">Short games to play between battles.</p>
+    <div class="modes">
+      <a class="mode mini rv" href="games/snake.html"><div class="ic">🐍</div><h3>SNAKE</h3><p>The classic. Eat, grow and don't crash.</p><span class="tg">PLAY →</span></a>
+      <a class="mode mini rv" href="games/tictactoe.html"><div class="ic">❌⭕</div><h3>TIC TAC TOE</h3><p>Challenge the computer or a friend.</p><span class="tg">PLAY →</span></a>
+      <a class="mode mini rv" href="more-games.html"><div class="ic">🎮</div><h3>ALL GAMES</h3><p>See every game in the hub.</p><span class="tg">OPEN →</span></a>
+    </div>
+  </div>
+</section>
 
-        </div>
-    </section>
 
-    <!-- FOOTER -->
-    <footer class="footer">
-        <p>Built for <strong>AI/IT Expo 2026</strong> · Forte Colleges of Excellence, Sargodha</p>
-        <p class="footer-small">Designed and developed by Daniyal</p>
-    </footer>
+<footer>
+  <p><b>NOVA STRIKE 3D</b> · Stage 1 · AI/IT Expo 2026 · Forte Colleges of Excellence, Sargodha</p>
+  <p style="margin-top:6px">Designed, tested and tuned by M. Daniyal · AI-assisted development</p>
+</footer>
 
-    <div id="mp-toast">🚧 Multiplayer is in development. Online 1v1 to 4v4 battles are coming soon!</div>
 
-    <script src="js/main.js"></script>
+<div id="hint">🔊 Tap anywhere to start the music</div>
 
-    <script>
-        // Show the modes section only after the Explore button (or the Games link) is pressed
-        (function () {
-            var section = document.getElementById('games');
 
-            function showGames() {
-                section.classList.remove('is-hidden');
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+<script>
+/* =========================================================
+   Hero animation: blue streaks, sparks, stars, searchlights
+   ========================================================= */
+(function () {
+  var cv = document.getElementById('fx'), hero = document.getElementById('hero');
+  var g = cv.getContext('2d');
+  var W = 0, H = 0, dpr = 1, stars = [], streaks = [], sparks = [], vis = true;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var DX = Math.cos(-0.38), DY = Math.sin(-0.38);
+  function rnd(a, b) { return a + Math.random() * (b - a); }
 
-            document.querySelectorAll('a[href="#games"]').forEach(function (link) {
-                link.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    showGames();
-                    history.replaceState(null, '', '#games');
-                });
-            });
 
-            // If the page is opened as index.html#games, show the modes straight away
-            if (location.hash === '#games') {
-                section.classList.remove('is-hidden');
-                setTimeout(showGames, 50);
-            }
+  function newStreak(init) {
+    var len = rnd(80, 240);
+    return { x: init ? rnd(-len, W) : -len, y: init ? rnd(0, H) : rnd(H * 0.2, H * 1.2), len: len, spd: rnd(380, 900), a: rnd(0.2, 0.6), w: rnd(1, 2.2) };
+  }
+  function newSpark(init) {
+    return { x: rnd(0, W), y: init ? rnd(0, H) : H + 10, r: rnd(0.8, 2.3), vy: rnd(16, 55), sw: rnd(0.5, 2), ph: rnd(0, 6.28) };
+  }
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = hero.clientWidth; H = hero.clientHeight;
+    cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    stars = []; var ns = Math.round(W * H / 9000);
+    for (var i = 0; i < ns; i++) stars.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(0.6, 1.8), p: rnd(0, 6.28), s: rnd(0.5, 2) });
+    streaks = []; var nk = Math.round(Math.min(26, Math.max(8, W / 70)));
+    for (i = 0; i < nk; i++) streaks.push(newStreak(true));
+    sparks = []; var np = Math.round(Math.min(70, W / 20));
+    for (i = 0; i < np; i++) sparks.push(newSpark(true));
+  }
+  function beam(x, y, ang, col) {
+    var len = H * 1.2, w = 0.07;
+    var gr = g.createLinearGradient(x, y, x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    gr.addColorStop(0, 'rgba(' + col + ',.20)'); gr.addColorStop(1, 'rgba(' + col + ',0)');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(x, y);
+    g.lineTo(x + Math.cos(ang - w) * len, y + Math.sin(ang - w) * len);
+    g.lineTo(x + Math.cos(ang + w) * len, y + Math.sin(ang + w) * len);
+    g.closePath(); g.fill();
+  }
+  var last = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    if (!vis) return;
+    var t = ts / 1000, dt = Math.min(0.05, Math.max(0, t - last)); last = t;
+    g.clearRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#fff';
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      g.globalAlpha = 0.2 + 0.7 * (0.5 + 0.5 * Math.sin(t * s.s + s.p));
+      g.fillRect(s.x, s.y, s.r, s.r);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'lighter';
+    beam(W * 0.12, H * 1.02, -Math.PI / 2 + Math.sin(t * 0.35) * 0.55, '56,182,255');
+    beam(W * 0.88, H * 1.02, -Math.PI / 2 + Math.sin(t * 0.28 + 2) * 0.55, '90,140,255');
+    g.lineCap = 'round';
+    for (i = 0; i < streaks.length; i++) {
+      var k = streaks[i];
+      k.x += DX * k.spd * dt; k.y += DY * k.spd * dt;
+      if (k.x > W + k.len || k.y < -k.len) streaks[i] = newStreak(false);
+      var tx = k.x - DX * k.len, ty = k.y - DY * k.len;
+      var gr = g.createLinearGradient(tx, ty, k.x, k.y);
+      gr.addColorStop(0, 'rgba(120,200,255,0)'); gr.addColorStop(1, 'rgba(120,200,255,' + k.a.toFixed(2) + ')');
+      g.strokeStyle = gr; g.lineWidth = k.w; g.beginPath(); g.moveTo(tx, ty); g.lineTo(k.x, k.y); g.stroke();
+    }
+    g.fillStyle = 'rgb(140,210,255)';
+    for (i = 0; i < sparks.length; i++) {
+      var e = sparks[i];
+      e.y -= e.vy * dt; e.x += Math.sin(t * e.sw + e.ph) * 14 * dt;
+      if (e.y < -10) sparks[i] = newSpark(false);
+      var a = 0.35 + 0.35 * Math.sin(t * 3 + e.ph);
+      a *= Math.min(1, (H - e.y) / (H * 0.15)); a *= Math.min(1, Math.max(0, e.y) / (H * 0.3));
+      g.globalAlpha = Math.max(0, a);
+      g.beginPath(); g.arc(e.x, e.y, e.r, 0, 6.283); g.fill();
+    }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (en) { vis = en[0].isIntersecting; }).observe(hero);
+  }
+  if (!reduce) requestAnimationFrame(frame);
 
-            // Multiplayer button: show a short message instead of opening a page
-            var toast = document.getElementById('mp-toast');
-            var toastTimer = null;
-            document.getElementById('mp-btn').addEventListener('click', function (e) {
-                e.preventDefault();
-                toast.classList.add('show');
-                clearTimeout(toastTimer);
-                toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 3000);
-            });
 
-            // Phone notice: close button (remembered for this visit)
-            var notice = document.getElementById('phone-notice');
-            try { if (sessionStorage.getItem('phoneNoticeClosed') === '1') notice.classList.add('closed'); } catch (e) {}
-            document.getElementById('phone-notice-close').addEventListener('click', function () {
-                notice.classList.add('closed');
-                try { sessionStorage.setItem('phoneNoticeClosed', '1'); } catch (e) {}
-            });
-        })();
-    </script>
+  // glow follows the mouse
+  if (!reduce) hero.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') return;
+    var r = hero.getBoundingClientRect();
+    hero.style.setProperty('--gx', ((e.clientX - r.left) / r.width - 0.5) * 120 + 'px');
+    hero.style.setProperty('--gy', ((e.clientY - r.top) / r.height - 0.5) * 70 + 'px');
+  });
+})();
 
-    <!-- NOVA assistant (press T) -->
-    <script type="module" src="games/assistant.js"></script>
+
+/* =========================================================
+   Typed tagline
+   ========================================================= */
+(function () {
+  var el = document.getElementById('typed');
+  var words = ['Command a squad.', 'Capture Port Town.', 'Defend it from the sea.', 'Built from scratch.'];
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = words[0]; return; }
+  var w = 0, c = 0, del = false;
+  function tick() {
+    var s = words[w];
+    if (!del) { c++; el.textContent = s.slice(0, c); if (c === s.length) { del = true; return setTimeout(tick, 1500); } }
+    else { c--; el.textContent = s.slice(0, c); if (c === 0) { del = false; w = (w + 1) % words.length; } }
+    setTimeout(tick, del ? 28 : 65);
+  }
+  tick();
+})();
+
+
+/* =========================================================
+   Scroll reveal + count-up numbers + poster tilt
+   ========================================================= */
+(function () {
+  var items = document.querySelectorAll('.rv');
+  if (!('IntersectionObserver' in window)) { items.forEach(function (n) { n.classList.add('in'); }); }
+  else {
+    var io = new IntersectionObserver(function (en) {
+      en.forEach(function (x) { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } });
+    }, { threshold: 0.12 });
+    items.forEach(function (n, i) { n.style.transitionDelay = (i % 3) * 90 + 'ms'; io.observe(n); });
+  }
+
+
+  document.querySelectorAll('[data-count]').forEach(function (n) {
+    var to = +n.dataset.count, suf = n.dataset.suf || '', t0 = null;
+    if (!to) return;
+    n.textContent = '0' + suf;
+    setTimeout(function () {
+      function step(ts) {
+        if (!t0) t0 = ts;
+        var p = Math.min(1, (ts - t0) / 1400);
+        n.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))) + suf;
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }, 500);
+  });
+
+
+  var po = document.getElementById('poster');
+  if (po && !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+    po.addEventListener('pointermove', function (e) {
+      var r = po.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      po.style.transform = 'rotateY(' + (x * 8).toFixed(2) + 'deg) rotateX(' + (-y * 6).toFixed(2) + 'deg) scale(1.015)';
+    });
+    po.addEventListener('pointerleave', function () { po.style.transform = ''; });
+  }
+})();
+
+
+/* =========================================================
+   Music (made in code, starts on the first click, tap or key)
+   ========================================================= */
+(function () {
+  var KEY = 'nova_home_music';
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var btn = document.getElementById('music-btn'), icon = document.getElementById('mi'), hint = document.getElementById('hint');
+  var ac = null, master = null, rev = null, playing = false, timer = 0, nextT = 0, stepI = 0, bar = 0, stopTok = 0;
+  var want = true;
+  try { want = localStorage.getItem(KEY) !== 'off'; } catch (e) {}
+
+
+  // Dm | Bb | F | C
+  var PAD = [[50, 53, 57, 62], [46, 50, 53, 58], [53, 57, 60, 65], [48, 52, 55, 60]];
+  var BASS = [38, 34, 41, 36];
+  var ARP = [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1];
+  var STEP = 0.5;
+  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+
+  function volume() {
+    var m = 0.8, u = 0.7;
+    try {
+      var s = JSON.parse(localStorage.getItem('nova_settings'));
+      if (s) { if (typeof s.master === 'number') m = s.master; if (typeof s.music === 'number') u = s.music; }
+    } catch (e) {}
+    return m * u * 0.9;
+  }
+  function ui() {
+    icon.textContent = playing ? '🔊' : '🔇';
+    btn.classList.toggle('on', playing);
+  }
+  function setup() {
+    if (ac) return ac;
+    if (!AC) return null;
+    try { ac = new AC(); } catch (e) { return null; }
+    var comp = ac.createDynamicsCompressor();
+    master = ac.createGain(); master.gain.value = 0;
+    master.connect(comp); comp.connect(ac.destination);
+    var conv = ac.createConvolver(), len = Math.floor(ac.sampleRate * 2.6), buf = ac.createBuffer(2, len, ac.sampleRate);
+    for (var c = 0; c < 2; c++) { var d = buf.getChannelData(c); for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    conv.buffer = buf;
+    rev = ac.createGain();
+    var wet = ac.createGain(); wet.gain.value = 0.5;
+    rev.connect(conv); conv.connect(wet); wet.connect(master);
+    return ac;
+  }
+  function tone(type, f, t, dur, vol, att, rel, cut, send, det) {
+    var o = ac.createOscillator(); o.type = type; o.frequency.value = f; if (det) o.detune.value = det;
+    var fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = cut;
+    var g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + att);
+    g.gain.setValueAtTime(vol, t + Math.max(dur, att + 0.01));
+    g.gain.linearRampToValueAtTime(0.0001, t + Math.max(dur, att + 0.01) + rel);
+    o.connect(fl); fl.connect(g); g.connect(master);
+    if (send) { var s = ac.createGain(); s.gain.value = send; g.connect(s); s.connect(rev); }
+    o.start(t); o.stop(t + Math.max(dur, att + 0.01) + rel + 0.05);
+  }
+  function boom(t) {
+    var o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.5);
+    var g = ac.createGain(); g.gain.setValueAtTime(0.28, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    o.connect(g); g.connect(master);
+    var s = ac.createGain(); s.gain.value = 0.5; g.connect(s); s.connect(rev);
+    o.start(t); o.stop(t + 1.5);
+  }
+  function sched(i, t) {
+    var chord = PAD[bar], barLen = STEP * 12;
+    if (i === 0) {
+      for (var k = 0; k < chord.length; k++) {
+        tone('sawtooth', mtof(chord[k]), t, barLen + 0.2, 0.022, 1.6, 1.6, 900, 0.5, -7);
+        tone('sawtooth', mtof(chord[k]), t, barLen + 0.2, 0.022, 1.6, 1.6, 900, 0.5, 7);
+      }
+      tone('sine', mtof(BASS[bar]), t, barLen * 0.92, 0.12, 0.08, 0.5, 400, 0, 0);
+      boom(t);
+    }
+    tone('triangle', mtof(chord[ARP[i]] + 12), t, 0.35, 0.05, 0.01, 0.5, 3200, 0.6, 0);
+    if (i === 0 || i === 6) tone('sine', mtof(chord[0] + 24), t, 0.2, 0.025, 0.01, 1.2, 4000, 0.8, 0);
+  }
+  function tick() {
+    if (!ac || !playing) return;
+    if (nextT < ac.currentTime - 0.1) nextT = ac.currentTime + 0.05;
+    while (nextT < ac.currentTime + 0.3) {
+      sched(stepI, nextT);
+      nextT += STEP; stepI++;
+      if (stepI >= 12) { stepI = 0; bar = (bar + 1) % 4; }
+    }
+  }
+  function start() {
+    if (!setup()) return;
+    stopTok++;
+    ac.resume().catch(function () {});
+    if (!playing) { playing = true; stepI = 0; bar = 0; nextT = ac.currentTime + 0.1; timer = setInterval(tick, 50); }
+    var t = ac.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(volume(), t + 3);
+    ui(); hint.classList.remove('show');
+  }
+  function stop() {
+    if (!ac || !playing) return;
+    playing = false; ui();
+    var t = ac.currentTime, tok = ++stopTok;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(0, t + 0.6);
+    setTimeout(function () { if (tok === stopTok) clearInterval(timer); }, 800);
+  }
+
+
+  btn.addEventListener('click', function () {
+    if (playing) { want = false; stop(); } else { want = true; start(); }
+    try { localStorage.setItem(KEY, want ? 'on' : 'off'); } catch (e) {}
+  });
+
+
+  // first click, tap or key press anywhere starts the music (browsers need this)
+  var evs = ['pointerdown', 'keydown', 'touchstart'];
+  function first(e) {
+    if (e.target && e.target.closest && e.target.closest('#music-btn')) { evs.forEach(function (n) { window.removeEventListener(n, first, true); }); return; }
+    evs.forEach(function (n) { window.removeEventListener(n, first, true); });
+    if (want && !playing) start();
+  }
+  if (AC) {
+    evs.forEach(function (n) { window.addEventListener(n, first, true); });
+    if (want) setTimeout(function () { if (!playing) hint.classList.add('show'); }, 900);
+    setTimeout(function () { hint.classList.remove('show'); }, 7000);
+  }
+
+
+  document.addEventListener('visibilitychange', function () {
+    if (!ac || !playing) return;
+    if (document.hidden) ac.suspend().catch(function () {}); else ac.resume().catch(function () {});
+  });
+  ui();
+})();
+</script>
+
+
+<!-- the T-key assistant of the website (unchanged file) -->
+<script src="games/assistant.js"></script>
 </body>
 </html>

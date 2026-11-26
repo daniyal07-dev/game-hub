@@ -1,25 +1,32 @@
 // games/campaign/units.js
-// Campaign Mode: the soldier brain (team soldiers for now).
+// Campaign Mode: the soldier brain (team soldiers).
 // Orders: 'follow' (formation behind the player), 'hold' (stay put), 'go' (walk to a point).
 // Soldiers walk with pathfinding.js, are kept out of walls by collision.js, and
 // are drawn by characters.js (SWAT model, walk / run / idle clips).
+// NEW: soldiers shoot the Space Gang on their own, using the weapon stats chosen at training.
+//   - target = nearest enemy inside the weapon range with a clear line (walls and trees block it)
+//   - hit chance drops with distance; the shotgun also loses damage with distance
+//   - on 'go' they stop and fight when an enemy is in range; on 'follow' and 'hold' they shoot
+//     from where they are
+//   - dead soldiers are removed after a while
 //
 // API:
-//   spawnSquad(scene, x, z, yaw, n=4)      -> how many soldiers were created
+//   spawnSquad(scene, x, z, yaw, n=4)        -> how many soldiers were created
 //   addSoldier(scene, x, z, heading, weapon) -> one new soldier (training), or null if at the cap
 //   aliveCount()  canAddSoldier()  MAX_UNITS
-//   WEAPON_STATS                           stats for pistol / rifle / shotgun (cost, time, damage...)
-//   updateUnits(dt, player)                call once per frame (player = {x, z, yaw})
+//   WEAPON_STATS                             stats for pistol / rifle / shotgun
+//   updateUnits(dt, player)                  call once per frame (player = {x, z, yaw})
 //   setOrder('follow'|'hold'|'go', x?, z?)
 //   getOrder()  getSoldiers()  unitsInfo()
-//   hurtSoldier(soldier, amount)           damage: hit reaction, or death at 0 hp
+//   hurtSoldier(soldier, amount)             damage: hit reaction, or death at 0 hp
 //   clearUnits(scene)
 
 
 
 import { findPath, walkableAt, pathInfo } from './pathfinding.js';
-import { resolve as resolveCollision } from './collision.js';
+import { resolve as resolveCollision, lineClear, groundHeight } from './collision.js';
 import { spawnCharacter, removeCharacter } from './characters.js';
+import { getEnemies, hurtEnemy, addTracer } from './enemies.js';
 
 
 
@@ -39,16 +46,26 @@ const REPATH_EVERY = 0.8;    // seconds between path searches per soldier
 const GOAL_MOVED = 2.5;      // repath only if the target moved more than this (m)
 const STUCK_TIME = 1.2;      // seconds of no progress before a new path
 const SEP_R = 0.9;           // soldiers keep this distance from each other (m)
-const PLAYER_KEEP = 1.3;     // soldiers keep this distance from the player (m)
 const FORM_BACK = 2.6;       // distance between formation rows (m)
 const FORM_SIDE = 1.9;       // distance of the two columns from the centre (m)
 const FORM_TURN_DIST = 2;    // formation direction updates after the player moves this far (m)
 
+// Combat
+const SENSE_EVERY = 0.3;     // seconds between target searches per soldier (keeps the FPS up)
+const REACT = 0.35;          // delay before the first shot at a new target (s)
+const AIM_STILL = 0.3;       // radians: must face the target this well to fire when standing
+const AIM_MOVING = 1.0;      // looser while running
+const HIT_BASE = 0.8;        // hit chance point blank
+const HIT_FALL = 0.012;      // hit chance lost per metre
+const HIT_MIN = 0.2;
+const ANIM_GAP = 0.5;        // shoot animation restarts at most this often (s)
+const DEAD_KEEP = 20;        // seconds a dead soldier's body stays
 
 
-/* ---------- Weapon stats (used by training now, by combat later) ----------
+
+/* ---------- Weapon stats (used by training and by combat) ----------
    cost    = supplies spent        time  = seconds to train
-   damage  = per shot (shotgun: per blast, close range)
+   damage  = per shot (shotgun: per blast, less with distance)
    range   = metres                rate  = seconds between shots            */
 export const WEAPON_STATS = {
   pistol:  { label: 'Pistol',  info: 'Fast and cheap. Short range.',            cost: 20, time: 4, damage: 12, range: 25, rate: 0.45 },
@@ -77,10 +94,11 @@ export const canAddSoldier = () => aliveCount() < MAX_UNITS;
 function makeSoldier(char, x, z, heading, weapon = 'rifle') {
   return {
     char, x, z, heading,
-    hp: 100, maxHp: 100, weapon, dead: false,
+    hp: 100, maxHp: 100, weapon, dead: false, deadT: 0,
     path: [], pi: 0, goalX: Infinity, goalZ: Infinity,
     repathT: 0, moving: false, stuckT: 0,
-    hold: { x, z, heading }
+    hold: { x, z, heading },
+    aim: null, senseT: Math.random() * SENSE_EVERY, fireT: 0, animT: 0
   };
 }
 
@@ -124,9 +142,7 @@ export function spawnSquad(scene, x, z, yaw, n = 4) {
 export function addSoldier(scene, x, z, heading, weapon = 'pistol') {
   if (!canAddSoldier()) return null;
   if (!WEAPON_STATS[weapon]) weapon = 'pistol';
-  let px = x, pz = z;
-  if (!walkableAt(px, pz)) { px = x; pz = z; }
-  const f = resolveCollision(px, pz, BODY_R);
+  const f = resolveCollision(x, z, BODY_R);
   const ch = spawnCharacter('team', scene);
   if (!ch) { console.warn('[units] characters are not loaded yet'); return null; }
   const s = makeSoldier(ch, f.x, f.z, heading, weapon);
@@ -168,7 +184,7 @@ export function setOrder(name, x, z) {
 export function hurtSoldier(s, amount) {
   if (!s || s.dead) return;
   s.hp -= amount;
-  if (s.hp <= 0) { s.hp = 0; s.dead = true; s.moving = false; s.char.die(); }
+  if (s.hp <= 0) { s.hp = 0; s.dead = true; s.deadT = 0; s.moving = false; s.aim = null; s.char.die(); }
   else s.char.hit();
 }
 
@@ -178,6 +194,67 @@ export function unitsInfo() {
   const alive = aliveCount();
   return `${alive}/${soldiers.length} alive, order ${order}, last path: ${pathInfo.nodes} nodes, ` +
          `${pathInfo.ms.toFixed(1)} ms, ${pathInfo.found ? 'found' : (pathInfo.partial ? 'PARTIAL' : 'none')}`;
+}
+
+
+
+/* ---------- Combat ---------- */
+// Pick a target now and then, and shoot when the weapon is ready.
+function combat(s, dt) {
+  const st = WEAPON_STATS[s.weapon] || WEAPON_STATS.pistol;
+  s.fireT -= dt;
+  s.animT -= dt;
+  s.senseT -= dt;
+
+  if (s.aim && (s.aim.dead || Math.hypot(s.aim.x - s.x, s.aim.z - s.z) > st.range + 3)) s.aim = null;
+
+  if (s.senseT <= 0) {
+    s.senseT = SENSE_EVERY + Math.random() * 0.1;
+    const near = [];
+    for (const e of getEnemies()) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - s.x, e.z - s.z);
+      if (d <= st.range) near.push({ e, d });
+    }
+    if (near.length) {
+      near.sort((a, b) => a.d - b.d);
+      let found = null;
+      for (let i = 0; i < Math.min(3, near.length); i++) {       // at most 3 line checks
+        if (lineClear(s.x, s.z, near[i].e.x, near[i].e.z)) { found = near[i].e; break; }
+      }
+      if (found && found !== s.aim) s.fireT = Math.max(s.fireT, REACT);
+      s.aim = found;
+    } else {
+      s.aim = null;
+    }
+  }
+
+  const e = s.aim;
+  if (!e || s.fireT > 0) return;
+
+  const dx = e.x - s.x, dz = e.z - s.z;
+  const dist = Math.hypot(dx, dz);
+  const want = Math.atan2(dx, dz);
+  const err = Math.abs(Math.atan2(Math.sin(want - s.heading), Math.cos(want - s.heading)));
+  if (err > (s.moving ? AIM_MOVING : AIM_STILL)) return;
+  if (!lineClear(s.x, s.z, e.x, e.z)) { s.aim = null; return; }   // never through a wall
+
+  s.fireT = st.rate + Math.random() * 0.12;
+  if (s.animT <= 0) { s.char.fire(); s.animT = ANIM_GAP; }
+
+  const hit = Math.random() < Math.max(HIT_MIN, HIT_BASE - dist * HIT_FALL);
+  let dmg = st.damage;
+  if (s.weapon === 'shotgun') dmg *= Math.max(0.25, 1 - dist / st.range);
+
+  const sx = s.x + Math.sin(s.heading) * 0.6, sz = s.z + Math.cos(s.heading) * 0.6;
+  const sy = groundHeight(s.x, s.z) + 1.35;
+  let tx = e.x, tz = e.z;
+  if (!hit) {
+    const side = (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 1.0);
+    tx += -Math.cos(s.heading) * side; tz += Math.sin(s.heading) * side;
+  }
+  addTracer(sx, sy, sz, tx, groundHeight(e.x, e.z) + 1.2, tz);
+  if (hit) hurtEnemy(e, dmg, { x: s.x, z: s.z });
 }
 
 
@@ -193,6 +270,14 @@ function slotTarget(i) {
 
 
 export function updateUnits(dt, player) {
+  // remove old bodies
+  for (let i = soldiers.length - 1; i >= 0; i--) {
+    const s = soldiers[i];
+    if (s.dead) {
+      s.deadT += dt;
+      if (s.deadT > DEAD_KEEP) { removeCharacter(s.char, null); soldiers.splice(i, 1); }
+    }
+  }
   if (!soldiers.length) return;
   pathBudget = 1;
 
@@ -217,6 +302,7 @@ export function updateUnits(dt, player) {
   let slot = 0;
   for (const s of soldiers) {
     if (s.dead) continue;
+    combat(s, dt);
     let tx, tz, idleHeading;
     if (order === 'follow') {
       const t = slotTarget(slot++);
@@ -225,7 +311,9 @@ export function updateUnits(dt, player) {
       tx = s.hold.x; tz = s.hold.z; idleHeading = s.hold.heading;
     } else {
       tx = goal.x; tz = goal.z; idleHeading = s.heading;
+      if (s.aim) { tx = s.x; tz = s.z; }               // 'go': stop and fight when an enemy is in range
     }
+    if (s.aim) idleHeading = Math.atan2(s.aim.x - s.x, s.aim.z - s.z);   // face the enemy when standing
     stepSoldier(s, tx, tz, idleHeading, dt, player);
   }
 
@@ -322,7 +410,7 @@ function stepSoldier(s, tx, tz, idleHeading, dt, player) {
 
 
 
-// Keep soldiers from standing inside each other or inside the player
+// Keep soldiers from standing inside each other
 function separate() {
   const n = soldiers.length;
   for (let i = 0; i < n; i++) {

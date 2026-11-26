@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#04040c">
+    <title>Play NOVA STRIKE 3D | Game Hub</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+
+
+    <style>
+        html, body {
+            margin: 0; height: 100%;
+            background: #04040c; color: #eaf6ff;
+            font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+        }
+
+
+        /* Plain page under the menu. Only visible if js/menu.js fails to load. */
+        #fallback {
+            min-height: 100%;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 14px; padding: 20px; text-align: center;
+        }
+        #fallback h1 {
+            margin: 0; letter-spacing: 0.1em;
+            text-shadow: 0 0 24px #00f0ff;
+        }
+        #fallback p { margin: 0 0 8px; color: #9a9ac0; }
+        #fallback a {
+            display: block; width: min(320px, 90vw);
+            padding: 14px 20px; border-radius: 12px;
+            border: 1px solid #00f0ff; background: #0a0e22;
+            color: #fff; text-decoration: none; font-weight: 700;
+            letter-spacing: 0.15em;
+        }
+        #fallback a:hover { background: #00283c; }
+    </style>
+</head>
+<body>
+
+
+    <!-- Fallback (the menu from js/menu.js covers this completely) -->
+    <div id="fallback">
+        <h1>NOVA STRIKE 3D</h1>
+        <p>Tactical AI Combat</p>
+        <a href="games/campaign.html">CAMPAIGN</a>
+        <a href="games/war.html">WAR MODE</a>
+        <a href="games/arena.html">ARENA MODE</a>
+        <a href="more-games.html">MORE GAMES</a>
+        <a href="index.html">HOME</a>
+    </div>
+
+
+    <!-- STAGE 1 badge for the menu (small separate file) -->
+    <script src="js/badge.js"></script>
+
+
+    <!-- The front door: splash, music, animated background, menu -->
+    <script type="module" src="js/menu.js"></script>
+</body>
+</html>

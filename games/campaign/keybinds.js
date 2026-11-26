@@ -5,7 +5,9 @@
 // Reserved keys: Esc (pause) and N (NOVA assistant).
 
 
+
 const STORE = 'campaign_keys';
+
 
 
 export const ACTIONS = [
@@ -19,6 +21,7 @@ export const ACTIONS = [
   { id: 'descend',  label: 'Fly down',            def: 'KeyC',      group: 'Movement' },
 
 
+
   { id: 'spawn',    label: 'Spawn 4 soldiers (test)', def: 'KeyG',   group: 'Squad' },
   { id: 'clear',    label: 'Remove all soldiers',     def: 'KeyT',   group: 'Squad' },
   { id: 'follow',   label: 'Squad: Follow me',        def: 'Digit1', group: 'Squad' },
@@ -26,13 +29,17 @@ export const ACTIONS = [
   { id: 'attack',   label: 'Squad: Go to town (test)', def: 'Digit3', group: 'Squad' },
 
 
-  { id: 'interact', label: 'Use / Train (coming soon)', def: 'KeyE', group: 'Actions' },
+
+  { id: 'interact', label: 'Use / Train soldiers',    def: 'KeyE',   group: 'Actions' },
+  { id: 'map',      label: 'Open / close map',        def: 'KeyM',   group: 'Actions' },
+
 
 
   { id: 'debug',    label: 'Show collision outlines', def: 'KeyB',   group: 'Debug' },
   { id: 'testsquad',label: 'Animation test squad',    def: 'KeyH',   group: 'Debug' },
   { id: 'info',     label: 'Print squad info',        def: 'KeyP',   group: 'Debug' }
 ];
+
 
 
 const RESERVED = new Set(['Escape', 'KeyN']);   // Esc always pauses, N always opens NOVA
@@ -44,12 +51,15 @@ const map = {};
 const listeners = [];
 
 
+
 function norm(code) { return code === 'ShiftRight' ? 'ShiftLeft' : code; }
+
 
 
 function changed() {
   listeners.forEach(fn => { try { fn(); } catch (e) { /* ignore */ } });
 }
+
 
 
 function load() {
@@ -68,12 +78,15 @@ function save() {
 load();
 
 
+
 /* ---------- API used by main.js and the start screen ---------- */
 export function key(id) { return map[id]; }
 
 
+
 // run fn every time a key is changed or reset (used to refresh the start-screen key list)
 export function onChange(fn) { listeners.push(fn); }
+
 
 
 // does this pressed key (e.code) belong to the action?
@@ -84,6 +97,7 @@ export function matches(id, code) {
 }
 
 
+
 // is the action's key held down right now? (keys = the {code: true} object in main.js)
 export function isDown(keys, id) {
   const c = map[id];
@@ -91,6 +105,7 @@ export function isDown(keys, id) {
   if (c === 'ShiftLeft') return !!(keys.ShiftLeft || keys.ShiftRight);
   return !!keys[c];
 }
+
 
 
 export function label(code) {
@@ -109,6 +124,7 @@ export function label(code) {
 }
 
 
+
 export function resetKeys() {
   ACTIONS.forEach(a => { map[a.id] = a.def; });
   save();
@@ -116,13 +132,16 @@ export function resetKeys() {
 }
 
 
+
 /* ---------- Settings panel ---------- */
 let panel = null, listening = null, noteEl = null;
+
 
 
 function setNote(text) {
   if (noteEl) noteEl.textContent = text || '';
 }
+
 
 
 function rebind(id, code) {
@@ -138,6 +157,7 @@ function rebind(id, code) {
 }
 
 
+
 function refresh() {
   if (!panel) return;
   panel.querySelectorAll('[data-act]').forEach(b => {
@@ -146,6 +166,7 @@ function refresh() {
     b.style.borderColor = (listening && listening.id === id) ? '#ffd84a' : 'rgba(255,255,255,.25)';
   });
 }
+
 
 
 function buildPanel() {
@@ -161,9 +182,11 @@ function buildPanel() {
     'If the key is already used, the two actions swap. Esc cancels. N is reserved for NOVA.</p>';
 
 
+
   noteEl = document.createElement('div');
   noteEl.style.cssText = 'min-height:18px;margin:0 0 4px;font-size:13px;font-weight:700;color:#ffd84a';
   box.appendChild(noteEl);
+
 
 
   let group = '';
@@ -189,6 +212,7 @@ function buildPanel() {
   });
 
 
+
   const bar = document.createElement('div');
   bar.style.cssText = 'display:flex;gap:10px;margin-top:16px;justify-content:flex-end';
   const reset = document.createElement('button');
@@ -206,10 +230,12 @@ function buildPanel() {
   box.appendChild(bar);
 
 
+
   panel.appendChild(box);
   document.body.appendChild(panel);
   refresh();
 }
+
 
 
 function openPanel() {
@@ -219,6 +245,7 @@ function openPanel() {
   refresh();
   panel.style.display = 'flex';
 }
+
 
 
 // while a key is being chosen, this catches it before the game sees it
@@ -235,9 +262,11 @@ window.addEventListener('keydown', (e) => {
 }, true);
 
 
+
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement && panel) { listening = null; panel.style.display = 'none'; }
 });
+
 
 
 // add the button next to "Quality"

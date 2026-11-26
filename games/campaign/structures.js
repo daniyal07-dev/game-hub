@@ -2,6 +2,8 @@
 // Campaign Mode: roads + runway, then everything from layout.js:
 // fences + gates, named buildings with door signs, pads, props, runway numbers, pier.
 // Static pieces are merged per material (few draw calls). Houses are Kenney GLB models.
+// Flags: friendly flagpoles fly the flag of Pakistan, hostile ones the Space Gang flag (drawn in code).
+
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -13,11 +15,16 @@ import {
 import { loadTexture, loadModel, cloneModel, modelSize } from './assets.js';
 
 
+
 /* ---------- Knobs ---------- */
 const HOUSE_FRONT_OFFSET = 0;   // if the Kenney houses face the wrong way, try Math.PI, Math.PI/2 or -Math.PI/2
 const SIGN_HEIGHT = 1.3;        // height of name signs in metres
 const ROAD_LIFT = 0.14;         // road height above the ground (m). Too floaty: lower. Road sinking into ground in patches: raise (0.2)
 const RUNWAY_LIFT = 0.16;       // same, for the runway
+const FLAG_W = 3.0;             // flag width in metres (Pakistan's flag is 3:2)
+const FLAG_H = 2.0;             // flag height in metres
+const FLAG_Y = 11.1;            // height of the flag centre on the pole
+
 
 
 export function createStructures(scene) {
@@ -29,12 +36,14 @@ export function createStructures(scene) {
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 
+
   /* ========================================================
      1. ROAD MATERIALS
      ======================================================== */
   const asphaltMap = loadTexture('asphalt_diff.jpg', { repeat: [1, 1], srgb: true, aniso: 8 });
   const asphaltNor = loadTexture('asphalt_nor.jpg', { repeat: [1, 1], srgb: false, aniso: 8 });
   const asphaltRough = loadTexture('asphalt_rough.jpg', { repeat: [1, 1], srgb: false, aniso: 8 });
+
 
 
   function pavedMaterial(color, offset) {
@@ -53,8 +62,10 @@ export function createStructures(scene) {
   }
 
 
+
   const roadMat = pavedMaterial(0xbdbdbd, -3.0);
   const runwayMat = pavedMaterial(0x9a9a9a, -4.0);
+
 
 
   const lineMat = new THREE.MeshBasicMaterial({
@@ -67,6 +78,7 @@ export function createStructures(scene) {
   });
 
 
+
   /* ========================================================
      2. ROAD / RUNWAY GENERATOR
      ======================================================== */
@@ -76,15 +88,18 @@ export function createStructures(scene) {
     const half = width * 0.5;
     const uMax = width / tile;
 
+
     const pos = [];
     const uvs = [];
     const indices = [];
     const rows = [];
     let dist = 0;
 
+
     for (let i = 0; i < n; i++) {
       const p = pts[i];
       if (i > 0) dist += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
+
 
       const nx = pts[Math.min(i + 1, n - 1)];
       const pv = pts[Math.max(i - 1, 0)];
@@ -93,10 +108,12 @@ export function createStructures(scene) {
       const len = Math.hypot(fx, fz) || 1;
       fx /= len; fz /= len;
 
+
       const rx = -fz * half;
       const rz = fx * half;
       const lx = p.x - rx, lz = p.z - rz;
       const qx = p.x + rx, qz = p.z + rz;
+
 
       const hL = heightAt(lx, lz);
       const hR = heightAt(qx, qz);
@@ -104,21 +121,26 @@ export function createStructures(scene) {
       const hML = heightAt((lx + p.x) * 0.5, (lz + p.z) * 0.5);
       const hMR = heightAt((qx + p.x) * 0.5, (qz + p.z) * 0.5);
 
+
       // each edge follows the ground under it (road hugs slopes instead of floating)
       const yL = Math.max(hL, hML) + elevation;
       const yR = Math.max(hR, hMR) + elevation;
       const skirtY = Math.min(hL, hR, hC) - skirtDepth;
+
 
       pos.push(lx, yL, lz);
       pos.push(qx, yR, qz);
       pos.push(lx, skirtY, lz);
       pos.push(qx, skirtY, qz);
 
+
       const v = dist / tile;
       uvs.push(0, v, uMax, v, 0, v, uMax, v);
 
+
       rows.push({ x: p.x, z: p.z, fx, fz, dist, y: (yL + yR) * 0.5 });
     }
+
 
     for (let i = 0; i < n - 1; i++) {
       const a = i * 4;
@@ -131,18 +153,22 @@ export function createStructures(scene) {
       indices.push(a + 3, b + 3, b + 1);
     }
 
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(indices);
     geo.computeVertexNormals();
 
+
     const mesh = new THREE.Mesh(geo, material);
     mesh.receiveShadow = true;
     group.add(mesh);
 
+
     return rows;
   }
+
 
 
   function addStrip(rows, offset, stripW, dash, gap, lift, material) {
@@ -151,6 +177,7 @@ export function createStructures(scene) {
     const period = dash + gap;
     const dashed = dash > 0 && gap > 0;
     let prevOn = false;
+
 
     for (const r of rows) {
       const on = dashed ? (r.dist % period) < dash : true;
@@ -170,6 +197,7 @@ export function createStructures(scene) {
       prevOn = on;
     }
 
+
     if (idx.length === 0) return;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -178,10 +206,12 @@ export function createStructures(scene) {
   }
 
 
+
   function rowAtDist(rows, d) {
     for (let i = 0; i < rows.length; i++) if (rows[i].dist >= d) return rows[i];
     return rows[rows.length - 1];
   }
+
 
 
   function numberTexture(text) {
@@ -202,11 +232,13 @@ export function createStructures(scene) {
   }
 
 
+
   // --- Roads ---
   for (const road of ROADS) {
     const rows = buildRoad(road.points, road.width, roadMat, 5, ROAD_LIFT, 3.5);
     addStrip(rows, 0, 0.35, 4.8, 4.8, 0.06, lineMat);
   }
+
 
 
   // --- Runway ---
@@ -215,9 +247,11 @@ export function createStructures(scene) {
     const total = rows[rows.length - 1].dist;
     const edge = RUNWAY.width * 0.5 - 1.2;
 
+
     addStrip(rows, 0, 0.9, 14, 10, 0.07, whiteMat);
     addStrip(rows, -edge, 0.5, 0, 0, 0.07, whiteMat);
     addStrip(rows, edge, 0.5, 0, 0, 0.07, whiteMat);
+
 
     const barGeo = new THREE.BoxGeometry(1.2, 0.08, 7);
     for (const d of [6.5, total - 6.5]) {
@@ -231,6 +265,7 @@ export function createStructures(scene) {
         group.add(bar);
       }
     }
+
 
     // Runway numbers, readable from the landing direction
     if (RUNWAY.numbers) {
@@ -255,6 +290,7 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      3. BATCHING (merge static pieces per material)
      ======================================================== */
@@ -263,6 +299,7 @@ export function createStructures(scene) {
     if (!batches.has(mat)) batches.set(mat, []);
     batches.get(mat).push(geo);
   }
+
 
   function flushBatches() {
     for (const [mat, list] of batches) {
@@ -277,11 +314,13 @@ export function createStructures(scene) {
   }
 
 
+
   const groundAt = (x, z, r) => Math.max(
     heightAt(x, z),
     heightAt(x + r, z + r), heightAt(x - r, z + r),
     heightAt(x + r, z - r), heightAt(x - r, z - r)
   );
+
 
 
   function xzOf(o) {
@@ -293,11 +332,13 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      4. MATERIALS + GEOMETRY HELPERS
      ======================================================== */
   const concMap = loadTexture('concrete_diff.jpg', { repeat: [3, 3], srgb: true, aniso: 4 });
   const concNor = loadTexture('concrete_nor.jpg', { repeat: [3, 3], srgb: false, aniso: 4 });
+
 
 
   // Window wall texture: one tile = 4 m wide, 3.5 m tall (one floor)
@@ -327,8 +368,10 @@ export function createStructures(scene) {
   })();
 
 
+
   const matCache = new Map();
   const std = (key, make) => { if (!matCache.has(key)) matCache.set(key, make()); return matCache.get(key); };
+
 
 
   // W = walls with windows, P = textured concrete, S = plain colour, RF = roof (double sided)
@@ -348,12 +391,14 @@ export function createStructures(scene) {
     new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, metalness: 0, side: THREE.DoubleSide }));
 
 
+
   const METAL = S(0x58626d, 0.4, 0.4);
   const DARK = S(0x22262a, 0.9, 0);
   const GLASS = S(0x2a4a66, 0.2, 0.6);
   const YELLOW = S(0xebb434, 0.7, 0);
   const WHITE = S(0xe8e8e8, 0.8, 0);
   const RED = S(0xb02a2a, 0.8, 0);
+
 
 
   // Box whose UVs follow its real size, so textures keep a constant scale
@@ -375,6 +420,7 @@ export function createStructures(scene) {
   }
 
 
+
   function scaleUV(g, k) {
     const uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * k, uv.getY(i) * k);
@@ -382,7 +428,9 @@ export function createStructures(scene) {
   }
 
 
+
   const cyl = (rt, rb, h, seg = 12) => new THREE.CylinderGeometry(rt, rb, h, seg);
+
 
 
   // Triangular roof prism: ridge along local X, base at y = 0
@@ -401,6 +449,7 @@ export function createStructures(scene) {
   }
 
 
+
   // Half-ellipse arch extruded along Z (hangar body)
   function archGeo(w, h, d) {
     const shape = new THREE.Shape();
@@ -414,6 +463,7 @@ export function createStructures(scene) {
     g.translate(0, 0, -d / 2);
     return scaleUV(g, 1 / 15);
   }
+
 
 
   // A frame = a position + heading. put() adds a piece in local coordinates (front = local +Z).
@@ -442,6 +492,7 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      5. NAME SIGNS (canvas text)
      ======================================================== */
@@ -455,8 +506,10 @@ export function createStructures(scene) {
   const styleFor = (place) => (place === 'town' ? signStyles.hostile : signStyles.friendly);
 
 
+
   const signMats = new Map();
   const unitPlane = new THREE.PlaneGeometry(1, 1);
+
 
 
   function signMaterial(text, style, wdt, hgt) {
@@ -491,6 +544,7 @@ export function createStructures(scene) {
   }
 
 
+
   // o: { x, y, z, h, maxW, both, thick }  (front plane at z + thick, back plane at z - thick)
   function addSign(f, text, style, o) {
     const hgt = o.h ?? SIGN_HEIGHT;
@@ -509,10 +563,12 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      6. PADS (helipad, motor pool, apron, town square)
      ======================================================== */
   const padColors = { apron: 0x8f9296, motorpool: 0x7b7f82, helipad: 0x6f7377, 'town-square': 0xa59b88 };
+
 
   for (const p of PADS || []) {
     const [px, pz] = xzOf(p);
@@ -521,6 +577,7 @@ export function createStructures(scene) {
     const mat = P(padColors[p.id] ?? 0x84888b);
     const shape = String(p.shape ?? p.kind ?? p.type ?? '').toLowerCase();
     const isCircle = shape.includes('circ') || (p.r != null && p.w == null && p.width == null);
+
 
     if (isCircle) {
       const r = p.r ?? p.radius ?? 5;
@@ -552,6 +609,7 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      7. FENCES (chain link, instanced) with gaps at the gates
      ======================================================== */
@@ -579,9 +637,11 @@ export function createStructures(scene) {
       map: chainTex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, depthWrite: true
     });
 
+
     const panelXf = [], postXf = [];
     const q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
     let fenceH = 3;
+
 
     for (const fence of FENCES || []) {
       const H = fence.height ?? 3;
@@ -591,11 +651,13 @@ export function createStructures(scene) {
       if (fence.closed !== false && (a0[0] !== aN[0] || a0[1] !== aN[1])) pts.push(a0);
       const gates = (GATES || []).filter((g) => (fence.gates || []).includes(g.id) || g.fence === fence.id);
 
+
       for (let i = 0; i < pts.length - 1; i++) {
         const ax = pts[i][0], az = pts[i][1], bx = pts[i + 1][0], bz = pts[i + 1][1];
         const L = Math.hypot(bx - ax, bz - az);
         if (L < 0.1) continue;
         const dx = (bx - ax) / L, dz = (bz - az) / L;
+
 
         const gaps = [];
         for (const g of gates) {
@@ -607,6 +669,7 @@ export function createStructures(scene) {
         }
         gaps.sort((a, b) => a[0] - b[0]);
 
+
         const free = [];
         let cursor = 0;
         for (const [g0, g1] of gaps) {
@@ -614,6 +677,7 @@ export function createStructures(scene) {
           cursor = Math.max(cursor, g1);
         }
         if (cursor < L) free.push([cursor, L]);
+
 
         for (const [t0, t1] of free) {
           const len = t1 - t0;
@@ -641,6 +705,7 @@ export function createStructures(scene) {
       }
     }
 
+
     if (panelXf.length) {
       const im = new THREE.InstancedMesh(unitPlane, chainMat, panelXf.length);
       panelXf.forEach((m, i) => im.setMatrixAt(i, m));
@@ -658,6 +723,7 @@ export function createStructures(scene) {
   buildFences();
 
 
+
   /* ========================================================
      8. GATES (pillars + beam + name sign)
      ======================================================== */
@@ -667,6 +733,7 @@ export function createStructures(scene) {
     const half = (g.width ?? 10) / 2;
     const kind = g.kind || 'gate';
 
+
     if (kind === 'barricade' || kind === 'landing') {
       const x0 = half + 2.6;
       for (const s of [-1, 1]) f.put(cyl(0.13, 0.13, 4.4, 6), METAL, x0 + s * 1.9, 2.0, 0);
@@ -674,6 +741,7 @@ export function createStructures(scene) {
         { x: x0, y: 3.5, z: 0, maxW: 6, both: true, thick: 0.1 });
       return;
     }
+
 
     const checkpoint = kind === 'checkpoint';
     const pil = checkpoint ? P(0x8d8f86) : P(0xb9bcbf);
@@ -684,6 +752,7 @@ export function createStructures(scene) {
     f.box(half * 2 + 2.6, 1.7, 1.0, checkpoint ? P(0x7a1b1b) : P(0x2f4a38), 0, 4.55, 0);
     addSign(f, g.name, checkpoint ? signStyles.alert : signStyles.gate,
       { y: 4.55, z: 0, maxW: half * 2 + 1.5, both: true, thick: 0.56 });
+
 
     if (!checkpoint) {
       // guard booth beside the gate
@@ -697,10 +766,12 @@ export function createStructures(scene) {
   for (const g of GATES || []) buildGate(g);
 
 
+
   /* ========================================================
      9. BUILDINGS
      ======================================================== */
   const roofColorFor = (b) => (b.place === 'town' ? 0x7a4636 : 0x4b535c);
+
 
   function bsign(f, b, y, maxW) {
     addSign(f, b.name, styleFor(b.place), {
@@ -708,15 +779,18 @@ export function createStructures(scene) {
     });
   }
 
+
   function slab(f, b, w, d) {
     f.box(w + 0.5, 2.5, d + 0.5, P(0x7d8084), 0, -0.95, 0);   // plinth: hides slopes, top at +0.3
   }
+
 
   function door(f, b, dw, dh, z) {
     const zz = (z ?? b.d / 2) + 0.02;
     f.box(dw, dh, 0.4, DARK, 0, 0.3 + dh / 2, zz);
     f.box(dw + 0.6, 0.35, 0.5, P(0xa6aaae), 0, 0.3 + dh + 0.17, zz);
   }
+
 
   // Body + roof + door. Returns the door height.
   function shell(f, b, o = {}) {
@@ -734,12 +808,14 @@ export function createStructures(scene) {
   }
   const defSignY = (b, dh) => Math.min(dh + 1.55, b.h - 0.7);
 
+
   function columns(f, n, spanW, z, height, r = 0.3, mat = P(0xbfc2c4)) {
     for (let i = 0; i < n; i++) {
       const x = n === 1 ? 0 : -spanW / 2 + (i * spanW) / (n - 1);
       f.put(cyl(r, r, height, 10), mat, x, 0.3 + height / 2, z);
     }
   }
+
 
   const BUILDERS = {
     hq(f, b) {
@@ -909,6 +985,7 @@ export function createStructures(scene) {
     }
   };
 
+
   function kindOf(b) {
     const t = String(b.type || '').toLowerCase();
     if (t === 'house') return 'house';
@@ -924,6 +1001,7 @@ export function createStructures(scene) {
     console.warn(`[structures] unknown building type "${b.type}" (${b.name}), using generic block`);
     return 'generic';
   }
+
 
 
   /* ---------- Kenney houses (GLB) with procedural fallback ---------- */
@@ -947,6 +1025,7 @@ export function createStructures(scene) {
     return wrap;
   }
 
+
   function fallbackHouse(x, y, z, rot, w, d, h, color) {
     const wrap = new THREE.Group();
     const wall = new THREE.Mesh(
@@ -969,12 +1048,14 @@ export function createStructures(scene) {
     return wrap;
   }
 
+
   function buildHouse(b, idx) {
     const gy = groundAt(b.x, b.z, b.w * 0.5);
     const hv = (HOUSES || []).find((h) => h[0] === b.x && h[1] === b.z);
     const variant = hv ? hv[3] : (b.variant ?? idx);
     const name = MODELS.houses[variant % MODELS.houses.length];
     if (pavedClearance(b.x, b.z) < 5) console.warn(`[structures] house at (${b.x}, ${b.z}) is close to a road`);
+
 
     const task = loadModel(name)
       .then((root) => {
@@ -988,12 +1069,14 @@ export function createStructures(scene) {
       });
     pending.push(task);
 
+
     // name sign on two posts in front of the house
     const f = makeFrame(b.x, gy, b.z, b.rot);
     const sz = b.d / 2 + 1.8;
     for (const s of [-1, 1]) f.put(cyl(0.07, 0.07, 2.3, 6), S(0x4a3a2a, 0.9, 0), s * 1.3, 1.05, sz);
     addSign(f, b.name, styleFor(b.place), { y: 1.95, z: sz, h: 0.9, maxW: 4.2, both: true, thick: 0.08 });
   }
+
 
   (BUILDINGS || []).forEach((raw, idx) => {
     const b = {
@@ -1012,6 +1095,7 @@ export function createStructures(scene) {
   });
 
 
+
   /* ========================================================
      10. PROPS (watchtowers, sandbags, barriers, flags, windsock)
      ======================================================== */
@@ -1019,10 +1103,95 @@ export function createStructures(scene) {
   const SAND = S(0xb09c6e, 0.95, 0);
   const CONC = P(0xa9acae);
 
+
+  /* ---------- Flags (drawn in code, no image files) ---------- */
+  // Pakistan: dark green field, white stripe at the pole (1/4 of the length),
+  // white crescent and five-pointed star on the green. Ratio 3:2.
+  function drawStar(g, cx, cy, r, tilt) {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 === 0 ? r : r * 0.382;
+      const a = tilt - Math.PI / 2 + i * Math.PI / 5;
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
+    g.fill();
+  }
+
+
+  function drawFlag(g, w, h, hostile) {
+    if (!hostile) {
+      const stripe = w / 4;
+      g.fillStyle = '#01411c';                              // Pakistan green
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, stripe, h);                          // white stripe at the pole
+      const gx = stripe + (w - stripe) / 2;                 // centre of the green part
+      const gy = h / 2;
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.arc(gx - 15, gy + 5, h * 0.275, 0, Math.PI * 2); g.fill();     // crescent: outer circle
+      g.fillStyle = '#01411c';
+      g.beginPath(); g.arc(gx + 17, gy - 10, h * 0.23, 0, Math.PI * 2); g.fill();     // cut-out opens to the fly side
+      g.fillStyle = '#ffffff';
+      drawStar(g, gx + 62, gy - 35, h * 0.105, 0.35);
+    } else {
+      // Space Gang: black flag, red ring with a red X
+      g.fillStyle = '#0d0d0f';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#b01818';
+      g.fillRect(0, 0, w, h * 0.07);
+      g.fillRect(0, h * 0.93, w, h * 0.07);
+      const cx = w / 2, cy = h / 2;
+      g.strokeStyle = '#d42020';
+      g.lineWidth = h * 0.07;
+      g.beginPath(); g.arc(cx, cy, h * 0.27, 0, Math.PI * 2); g.stroke();
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(cx - h * 0.17, cy - h * 0.17); g.lineTo(cx + h * 0.17, cy + h * 0.17);
+      g.moveTo(cx + h * 0.17, cy - h * 0.17); g.lineTo(cx - h * 0.17, cy + h * 0.17);
+      g.stroke();
+    }
+  }
+
+
+  const flagMats = new Map();
+  // back = true: mirrored picture for the far side, so the stripe stays at the pole on both sides
+  function flagMaterial(hostile, back) {
+    const key = (hostile ? 'h' : 'f') + (back ? 'b' : 'f');
+    if (flagMats.has(key)) return flagMats.get(key);
+    const w = 600, h = 400;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    if (back) { g.translate(w, 0); g.scale(-1, 1); }
+    drawFlag(g, w, h, hostile);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    flagMats.set(key, mat);
+    return mat;
+  }
+
+
+  function addFlag(f, hostile) {
+    for (const s of [1, -1]) {
+      const m = new THREE.Mesh(unitPlane, flagMaterial(hostile, s === -1));
+      const p = f.toWorld(0.12 + FLAG_W / 2, FLAG_Y, s * 0.02);
+      m.position.set(p[0], p[1], p[2]);
+      m.rotation.y = f.rot + (s === 1 ? 0 : Math.PI);
+      m.scale.set(FLAG_W, FLAG_H, 1);
+      group.add(m);
+    }
+  }
+
+
   function buildProp(p) {
     const gy = groundAt(p.x, p.z, 1.2);
     const f = makeFrame(p.x, gy, p.z, p.rot ?? 0);
     const len = p.len ?? 5;
+
 
     switch (p.type) {
       case 'watchtower': {
@@ -1058,8 +1227,7 @@ export function createStructures(scene) {
         f.box(1.2, 0.4, 1.2, CONC, 0, 0.2, 0);
         f.put(cyl(0.1, 0.14, 12, 8), METAL, 0, 6.2, 0);
         f.put(new THREE.SphereGeometry(0.2, 8, 6), YELLOW, 0, 12.3, 0);
-        f.box(3.0, 1.8, 0.06, S(hostile ? 0x9b1c1c : 0x2c5aa0), 1.65, 11.2, 0);
-        f.box(3.0, 0.5, 0.07, S(hostile ? 0x151515 : 0xf0f0f0), 1.65, 11.2, 0);
+        addFlag(f, hostile);                       // Pakistan (friendly) or Space Gang (hostile)
         break;
       }
       case 'windsock': {
@@ -1074,6 +1242,7 @@ export function createStructures(scene) {
   for (const p of PROPS || []) buildProp(p);
 
 
+
   /* ========================================================
      11. PIER + HARBOR (from layout.js PIER)
      ======================================================== */
@@ -1082,6 +1251,7 @@ export function createStructures(scene) {
     const woodMat = new THREE.MeshStandardMaterial({ color: 0xd2b79a, map: woodMap, roughness: 0.9, metalness: 0 });
     const L = PIER.length ?? 36, Wd = PIER.width ?? 6;
     const f = makeFrame(PIER.x, 0, PIER.z, PIER.rot ?? 0);
+
 
     f.box(Wd, 0.4, L, woodMat, 0, 1.2, 0);                            // deck (default UVs)
     for (let z = -L / 2 + 1; z <= L / 2; z += 6) {
@@ -1104,12 +1274,14 @@ export function createStructures(scene) {
   }
 
 
+
   /* ========================================================
      12. FINISH
      ======================================================== */
   flushBatches();
   scene.add(group);
   console.log(`[structures] built ${(BUILDINGS || []).length} buildings, ${(GATES || []).length} gates, ${(FENCES || []).length} fences, ${(PROPS || []).length} props`);
+
 
   return {
     ready: Promise.all(pending),

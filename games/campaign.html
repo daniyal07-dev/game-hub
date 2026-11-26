@@ -6,6 +6,8 @@
   <title>NOVA STRIKE 3D - Campaign</title>
 
 
+
+
   <script type="importmap">
     {
       "imports": {
@@ -16,6 +18,8 @@
   </script>
 
 
+
+
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0f18; color: #fff;
@@ -23,6 +27,8 @@
     .hidden { display: none !important; }
     #game-container { position: fixed; inset: 0; }
     #game-container canvas { display: block; }
+
+
 
 
     /* small on-screen info */
@@ -35,9 +41,13 @@
       border-radius: 50%; background: rgba(255,255,255,0.8); z-index: 5; pointer-events: none; }
 
 
+
+
     #loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
       justify-content: center; background: #0a0f18; font-weight: 700; letter-spacing: 2px;
       font-size: 18px; color: #7fe9ff; }
+
+
 
 
     .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
@@ -48,9 +58,9 @@
     .panel h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: 3px; }
     .panel h1 span { color: #7fe9ff; }
     .subtitle { margin: 0 0 6px; opacity: 0.8; font-size: 14px; }
-    .tag { display: inline-block; margin: 6px 0 12px; padding: 3px 10px; border-radius: 20px;
-      font-size: 11px; font-weight: 800; letter-spacing: 1px; background: rgba(255,210,74,0.15);
-      border: 1px solid #ffd24a; color: #ffd24a; }
+    .tag { display: inline-block; margin: 6px 0 12px; padding: 3px 12px; border-radius: 20px;
+      font-size: 11px; font-weight: 800; letter-spacing: 2px; background: rgba(56,182,255,0.15);
+      border: 1px solid #38b6ff; color: #bfe4ff; }
     .controls { list-style: none; padding: 0; margin: 0 0 8px; font-size: 13px; text-align: left;
       display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
     .controls b { display: inline-block; min-width: 64px; color: #7fe9ff; }
@@ -65,7 +75,11 @@
 <body>
 
 
+
+
   <div id="game-container"></div>
+
+
 
 
   <!-- Small info (FPS, position) -->
@@ -77,7 +91,11 @@
   <div id="crosshair" class="hidden"></div>
 
 
+
+
   <div id="loading">GENERATING ISLAND...</div>
+
+
 
 
   <!-- Start / pause screen -->
@@ -85,11 +103,14 @@
     <div class="panel">
       <h1>NOVA STRIKE <span>CAMPAIGN</span></h1>
       <p class="subtitle">Strike Command Island</p>
-      <div class="tag">UNDER DEVELOPMENT · RTS IN PROGRESS</div>
+      <div class="tag">STAGE 1 · PLAYABLE</div>
+
+
 
 
       <!-- the keys in <b data-keys="..."> are filled in by the script at the bottom,
-           so they always show the player's real (rebound) keys -->
+           so they always show the player's real (rebound) keys.
+           If an action is not known yet, the text written here stays. -->
       <ul class="controls">
         <li><b data-keys="forward,left,back,right">W A S D</b> Move</li>
         <li><b data-keys="sprint">Shift</b> Sprint</li>
@@ -97,17 +118,25 @@
         <li><b data-keys="jump">Space</b> Jump</li>
         <li><b data-keys="fly">F</b> Fly mode (explore)</li>
         <li><b data-keys="descend">C</b> Fly down</li>
+        <li><b>Click</b> Shoot</li>
+        <li><b>R</b> Reload</li>
+        <li><b>Q</b> Switch weapon</li>
+        <li><b data-keys="map">M</b> Map</li>
         <li><b data-keys="follow">1</b> Squad: Follow me</li>
         <li><b data-keys="hold">2</b> Squad: Hold</li>
-        <li><b data-keys="attack">3</b> Squad: Go to town (test)</li>
-        <li><b data-keys="interact">E</b> Use / Train (soon)</li>
+        <li><b data-keys="attack">3</b> Squad: Attack town</li>
+        <li><b data-keys="interact">E</b> Use / Train soldiers</li>
         <li><b>N</b> NOVA assistant</li>
         <li><b>Esc</b> Pause</li>
       </ul>
       <p class="keys-hint">Want different keys? Click ⌨ Controls below.</p>
 
 
+
+
       <p id="touch-note" class="hidden">The Campaign map is PC only for now (keyboard and mouse).</p>
+
+
 
 
       <div>
@@ -115,13 +144,18 @@
       </div>
       <div>
         <button id="quality-btn" class="btn ghost" type="button">Quality: Medium</button>
-        <a class="btn ghost" href="../index.html">← Back to Hub</a>
+        <a class="btn ghost" href="../play.html#menu">← Back to Menu</a>
+        <a class="btn ghost" href="../index.html">Home</a>
       </div>
     </div>
   </div>
 
 
+
+
   <script type="module" src="campaign/main.js"></script>
+
+
 
 
   <!-- keeps the start-screen key list in sync with keybinds.js -->
@@ -129,12 +163,23 @@
     import { key, label, onChange } from './campaign/keybinds.js';
     function render() {
       document.querySelectorAll('[data-keys]').forEach((el) => {
-        el.textContent = el.dataset.keys.split(',').map((id) => label(key(id))).join(' ');
+        if (!el.dataset.def) el.dataset.def = el.textContent;   // remember the written default
+        try {
+          el.textContent = el.dataset.keys.split(',').map((id) => {
+            const k = key(id);
+            if (!k) throw new Error('unknown action ' + id);
+            return label(k);
+          }).join(' ');
+        } catch (e) {
+          el.textContent = el.dataset.def;                      // unknown action: keep default
+        }
       });
     }
     render();
     onChange(render);
   </script>
+
+
 
 
   <!-- NOVA assistant for the Campaign (press N). Separate from games/assistant.js -->
