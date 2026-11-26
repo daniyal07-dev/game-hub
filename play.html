@@ -8,12 +8,14 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
 
 
+
     <style>
         html, body {
             margin: 0; height: 100%;
             background: #04040c; color: #eaf6ff;
             font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
         }
+
 
 
         /* Plain page under the menu. Only visible if js/menu.js fails to load. */
@@ -41,6 +43,7 @@
 <body>
 
 
+
     <!-- Fallback (the menu from js/menu.js covers this completely) -->
     <div id="fallback">
         <h1>NOVA STRIKE 3D</h1>
@@ -53,8 +56,15 @@
     </div>
 
 
+
+    <!-- Phones only: first tap opens fullscreen and locks landscape (does nothing on PC) -->
+    <script src="js/phone-fs.js"></script>
+
+
+
     <!-- STAGE 1 badge for the menu (small separate file) -->
     <script src="js/badge.js"></script>
+
 
 
     <!-- The front door: splash, music, animated background, menu -->
