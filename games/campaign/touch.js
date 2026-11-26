@@ -1,4 +1,4 @@
-// games/campaign/touch.js  (v3)
+// games/campaign/touch.js  (v4)
 // Phone controls for Campaign. Loaded only on phones (see campaign.html).
 // PC controls are never touched by this file.
 //
@@ -20,8 +20,10 @@ const SCAN_MS = 200;       // how often the wording scanner runs
 const MINIMAP_SCALE = 0.6;
 const TAP_MAX_MOVE = 14;   // px a finger may move and still count as a tap
 const TAP_MAX_MS = 450;
+const INTRO_ZOOM = 0.55;   // size of the intro text on phones (1 = as on PC)
 
 const KEYS = { KeyE: 'e', KeyM: 'm', KeyR: 'r', KeyQ: 'q', Digit1: '1', Digit2: '2', Digit3: '3', Space: ' ' };
+const INTRO_RE = /port town has fallen|space gang has captured|operation port town|train an army|take the town back/i;
 
 /* ---------- State ---------- */
 let CT = null;             // window.campaignTouch (from main.js)
@@ -32,7 +34,7 @@ let sprinting = false, useNow = false;
 let stickT = { id: null, ox: 0, oy: 0 };
 let lookT = { id: null, x: 0, y: 0 };
 let mmT = null, fireT = null;
-let mmEl = null, aiEl = null, labelNode = null, labelMode = null;
+let mmEl = null, aiEl = null, labelNode = null, labelHost = null, labelMode = null, labelWatched = false;
 let wakeLock = null;
 
 /* ---------- Start: wait for main.js to publish campaignTouch ---------- */
@@ -188,7 +190,7 @@ function init() {
 
   setInterval(scan, SCAN_MS);
   syncState();
-  console.log('[touch] phone controls ready (v3)');
+  console.log('[touch] phone controls ready (v4)');
 }
 
 
@@ -345,7 +347,7 @@ function scan() {
   syncState();
   if (!playing) return;
 
-  let intro = false, use = false;
+  let intro = false, use = false, skipEl = null;
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
@@ -393,13 +395,13 @@ function scan() {
     // minimap label ("... M MAP")
     if (/m\s*map/i.test(v)) {
       if (labelMode === 'strip') v = v.replace(/\s*[·•\-–|]?\s*M\s*MAP/i, '');
-      else if (labelMode === null) labelNode = n;
+      else if (labelMode === null) { labelNode = n; labelHost = n.parentElement; }
     }
 
     if (v !== before) n.nodeValue = v;
 
     const p = n.parentElement;
-    if (/tap to skip/i.test(v) && shown(p)) intro = true;
+    if (/tap to skip/i.test(v) && shown(p)) { intro = true; skipEl = p; }
     if (/tap use/i.test(v) && shown(p)) use = true;
     else if (/tap\s*$/i.test(v) && n.nextSibling && n.nextSibling.nodeType === 1 &&
              /^use$/i.test(n.nextSibling.textContent.trim()) && shown(p)) use = true;
@@ -415,13 +417,38 @@ function scan() {
   if (intro !== introOn) {
     introOn = intro;
     root.classList.toggle('tc-intro', introOn);
+    document.body.classList.toggle('tc-intro-on', introOn);
     if (introOn) releaseAll();
   }
+  if (introOn) shrinkIntro(nodes, skipEl);
   useNow = use && !introOn;
+
+  // tutorial bar and mission objective must not sit on top of each other
+  const mo = document.getElementById('mission-objective');
+  const go = document.getElementById('guide-objective');
+  if (go) go.classList.toggle('tc-hide', !!(mo && shown(mo) && mo.textContent.trim()));
 
   findMinimap();
   settleLabel();
   updateButtons();
+}
+
+// Intro lines are made for a big PC screen: shrink them on a phone.
+function shrinkIntro(nodes, skipEl) {
+  const overlay = skipEl ? fixedAncestor(skipEl) : null;
+  for (const n of nodes) {
+    const p = n.parentElement;
+    if (!p || p === skipEl || p === overlay) continue;
+    if (skipEl && p.contains(skipEl)) continue;
+    if (p.closest('[data-tc-zoom]')) continue;
+    const t = n.nodeValue.trim();
+    if (!t || /tap to skip/i.test(t)) continue;
+    const inOverlay = !!(overlay && overlay !== skipEl && overlay.contains(p));
+    if (INTRO_RE.test(t) || inOverlay) {
+      p.setAttribute('data-tc-zoom', '1');
+      p.style.setProperty('zoom', String(INTRO_ZOOM), 'important');
+    }
+  }
 }
 
 function findMinimap() {
@@ -440,17 +467,33 @@ function findMinimap() {
 }
 
 function settleLabel() {
-  if (labelMode || !labelNode || !mmEl) return;
-  const lp = labelNode.parentElement;
-  const lf = lp ? fixedAncestor(lp) : null;
+  if (labelMode || !labelHost || !mmEl) return;
+  const lf = fixedAncestor(labelHost);
   if (lf && lf !== mmEl && !mmEl.contains(lf)) {
     lf.classList.add('tc-hide');
     labelMode = 'hide';
     console.log('[touch] hid map label: ' + desc(lf));
   } else {
     labelMode = 'strip';
+    watchLabel();
     console.log('[touch] map label text trimmed');
   }
+}
+
+// The minimap rewrites its label all the time; strip "M MAP" the moment it does.
+function watchLabel() {
+  if (labelWatched || !labelHost) return;
+  labelWatched = true;
+  const strip = () => {
+    const w = document.createTreeWalker(labelHost, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (/m\s*map/i.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/\s*[·•\-–|]?\s*M\s*MAP/i, '');
+    }
+  };
+  new MutationObserver(strip).observe(labelHost, { childList: true, characterData: true, subtree: true });
+  labelHost.style.whiteSpace = 'nowrap';
+  strip();
 }
 
 function updateButtons() {
@@ -495,14 +538,17 @@ body.tc-phone{overscroll-behavior:none;-webkit-user-select:none;user-select:none
   border-color:rgba(255,210,74,.9);background:rgba(60,46,8,.6);color:#ffe9a0;font-size:13px}
 .tc-btn.pause{width:36px;height:36px;right:calc(8px + var(--tc-r));top:8px;font-size:11px}
 
-.tc-pills{position:fixed;z-index:30;left:50%;transform:translateX(-50%);bottom:38px;gap:8px}
+/* squad pills: above the health bar (health bar top is about 44px from the bottom) */
+.tc-pills{position:fixed;z-index:30;left:50%;transform:translateX(-50%);bottom:54px;gap:8px}
 .tc-pill{min-width:68px;height:34px;padding:0 10px;border-radius:17px;display:flex;align-items:center;justify-content:center;
   background:rgba(10,24,44,.6);border:1.5px solid rgba(0,200,255,.7);color:#dff6ff;
   font:700 11px/1 system-ui,sans-serif;letter-spacing:.6px;touch-action:none}
 .tc-pill.down{background:rgba(0,200,255,.45)}
 
-/* intro: only the tap layer */
+/* intro: only the tap layer, and no HUD pieces on top of the title */
 .tc-root.tc-intro > :not(.tc-look){display:none!important}
+body.tc-intro-on .tc-ai,body.tc-intro-on .tc-mm,body.tc-intro-on #train-supply,body.tc-intro-on #train-box,
+body.tc-intro-on #hud-title,body.tc-intro-on #hud-mode,body.tc-intro-on #health-hud,body.tc-intro-on #gun-hud{display:none!important}
 
 /* map open: only the close bar */
 .tc-mapclose{position:fixed;inset:0;z-index:2147483000;display:none;align-items:flex-end;justify-content:center;
@@ -521,7 +567,8 @@ body.tc-map .tc-root > :not(.tc-mapclose){display:none!important}
 
 /* ---------- HUD tidy-up (phone only) ---------- */
 body.tc-phone #hud-info{display:none!important}
-body.tc-phone #hud-title,body.tc-phone #hud-mode{font-size:10px!important;opacity:.85}
+body.tc-phone #hud-title{display:none!important}
+body.tc-phone #hud-mode{font-size:10px!important;opacity:.85}
 body.tc-phone #gun-hud{transform:scale(.7)!important;transform-origin:bottom right!important;
   left:auto!important;top:auto!important;right:calc(170px + var(--tc-r))!important;bottom:16px!important}
 body.tc-phone #gun-hud .gun-hint{display:none!important}
@@ -533,7 +580,7 @@ body.tc-phone #mission-radio{transform:scale(.66)!important;transform-origin:top
   left:calc(10px + var(--tc-l))!important;top:122px!important;max-width:340px}
 body.tc-phone #train-supply{left:calc(10px + var(--tc-l))!important;top:58px!important;bottom:auto!important;
   transform:scale(.7);transform-origin:top left}
-body.tc-phone #train-box{bottom:84px!important}
+body.tc-phone #train-box{bottom:96px!important}
 body.tc-phone .tc-ai{left:calc(10px + var(--tc-l))!important;top:92px!important;right:auto!important;bottom:auto!important;
   transform:scale(.62)!important;transform-origin:top left!important;z-index:35!important}
 body.tc-phone:not(.tc-map) .tc-mm{position:fixed!important;transform:scale(${MINIMAP_SCALE})!important;transform-origin:top right!important;
