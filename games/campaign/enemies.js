@@ -1,4 +1,4 @@
-// games/campaign/enemies.js   (v2: difficulty pass)
+// games/campaign/enemies.js   (v3: combat balance)
 // Campaign Mode: the Space Gang (enemy soldiers) in Port Town.
 //  - 10 guards stand at the checkpoints, the square and the Town Hall.
 //    The 2 guards in front of the Town Hall are ELITE (more health, better aim).
@@ -14,6 +14,9 @@
 //
 //  v2: DIFFICULTY. Change LEVEL below ('easy' | 'normal' | 'hard'),
 //      or in the Console:  setDifficulty('hard')
+//  v3: COMBAT BALANCE. Your shots count more, your soldiers' shots count less,
+//      enemies hit soldiers harder. Knobs: PLAYER_DMG, SOLDIER_DMG, SOLDIER_TAKE, SOLDIER_HIT_BONUS.
+//      Live tuning in the Console:  tuneCombat({ player: 1.8, soldier: 0.5, take: 1.5, bonus: 0.08 })
 //
 // API:
 //   initEnemies(scene, hooks)       hooks = { isReady, soldiers, hurtSoldier, hurtPlayer, equip }
@@ -29,6 +32,7 @@
 
 
 
+
 import * as THREE from 'three';
 import { findPath, walkableAt } from './pathfinding.js';
 import { resolve as resolveCollision, lineClear, groundHeight } from './collision.js';
@@ -37,8 +41,10 @@ import { spawnCharacter, removeCharacter } from './characters.js';
 
 
 
+
 /* ---------- DIFFICULTY ---------- */
 const LEVEL = 'normal';       // 'easy' (the old values) | 'normal' | 'hard'
+
 
 const PRESETS = {
   //          health  damage  sight  range  engage  hear  fov   rate  rand  react  hit   fall   min   alert  run   shout  elite
@@ -51,6 +57,31 @@ const PRESETS = {
 };
 const D = Object.assign({}, PRESETS[LEVEL] || PRESETS.normal);
 let levelName = PRESETS[LEVEL] ? LEVEL : 'normal';
+
+
+
+
+
+/* ---------- COMBAT BALANCE (v3) ---------- */
+const C = {
+  player: 1.5,     // damage multiplier when YOU shoot an enemy (higher = fewer shots needed)
+  soldier: 0.6,    // damage multiplier when YOUR SOLDIERS shoot an enemy (lower = harder for them)
+  take: 1.5,       // damage multiplier when an enemy shoots a soldier or base guard
+  bonus: 0.08      // extra hit chance when an enemy shoots a soldier or base guard
+};
+const FROM_PLAYER_R = 0.75;   // a shot that starts this close to you counts as YOUR shot
+
+window.tuneCombat = (o) => {
+  if (o && typeof o === 'object') {
+    if (typeof o.player === 'number') C.player = o.player;
+    if (typeof o.soldier === 'number') C.soldier = o.soldier;
+    if (typeof o.take === 'number') C.take = o.take;
+    if (typeof o.bonus === 'number') C.bonus = o.bonus;
+  }
+  console.log('[enemies] combat: you x' + C.player + ', soldiers x' + C.soldier +
+              ', enemies on soldiers x' + C.take + ' (+' + C.bonus + ' hit chance)');
+};
+
 
 
 
@@ -73,6 +104,7 @@ const SHOW_DIST = 220;        // enemies further than this from you are not draw
 const MAX_ENEMIES = 30;       // living enemies at once
 
 
+
 // Town guards: x, z, heading (0 = facing south +Z, PI/2 = east, PI = north, -PI/2 = west)
 const H = Math.PI;
 const TOWN_GUARDS = [
@@ -91,6 +123,7 @@ const TOWN_GUARDS = [
 
 
 
+
 /* ---------- State ---------- */
 const enemies = [];
 let scene = null;
@@ -99,6 +132,8 @@ let extraTargets = null;      // set by registerTargets (the base guards)
 let spawned = false;
 let kills = 0;
 let pathBudget = 1;
+let lastPlayer = null;        // the player object (to tell his shots from a soldier's)
+
 
 
 export const getEnemies = () => enemies;
@@ -107,12 +142,15 @@ export const killCount = () => kills;
 export const difficultyName = () => levelName;
 
 
+
 export function registerTargets(fn) {
   extraTargets = (typeof fn === 'function') ? fn : null;
 }
 
 
+
 const maxHpFor = (elite) => (elite ? D.eliteHp : D.hp);
+
 
 
 // Change the level while playing. Living enemies keep the same share of health.
@@ -133,6 +171,7 @@ window.setDifficulty = setDifficulty;
 
 
 
+
 const wrapTurn = (cur, want, maxStep) => {
   let d = want - cur;
   d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -143,10 +182,12 @@ const wrapTurn = (cur, want, maxStep) => {
 
 
 
+
 /* ---------- Tracers (bullet lines) ---------- */
 const TR_N = 16;
 const tracers = [];
 let trI = 0;
+
 
 
 function buildTracers() {
@@ -163,6 +204,7 @@ function buildTracers() {
 }
 
 
+
 export function addTracer(x1, y1, z1, x2, y2, z2) {
   if (!tracers.length) return;
   const tr = tracers[trI++ % TR_N];
@@ -175,6 +217,7 @@ export function addTracer(x1, y1, z1, x2, y2, z2) {
 }
 
 
+
 function updateTracers(dt) {
   for (const tr of tracers) {
     if (tr.t > 0) { tr.t -= dt; if (tr.t <= 0) tr.l.visible = false; }
@@ -184,14 +227,16 @@ function updateTracers(dt) {
 
 
 
+
 /* ---------- Setup and spawning ---------- */
 export function initEnemies(sceneRef, h) {
   scene = sceneRef;
   hooks = Object.assign(hooks, h || {});
   buildTracers();
-  console.log('[enemies] ready: ' + TOWN_GUARDS.length + ' Space Gang guards will appear in Port Town. Difficulty: ' +
-              levelName + ". Change it in the Console with setDifficulty('hard')");
+  console.log('[enemies] v3 ready: ' + TOWN_GUARDS.length + ' Space Gang guards will appear in Port Town. Difficulty: ' +
+              levelName + ". Change it in the Console with setDifficulty('hard'). Balance: tuneCombat()");
 }
+
 
 
 function findSpot(x, z) {
@@ -204,6 +249,7 @@ function findSpot(x, z) {
   }
   return null;
 }
+
 
 
 export function spawnEnemy(x, z, heading = 0, opts) {
@@ -233,11 +279,13 @@ export function spawnEnemy(x, z, heading = 0, opts) {
 }
 
 
+
 function spawnTown() {
   let n = 0;
   for (const g of TOWN_GUARDS) if (spawnEnemy(g.x, g.z, g.h, { elite: !!g.elite })) n++;
   console.log('[enemies] Space Gang guards in town: ' + n);
 }
+
 
 
 export function resetEnemies(sceneRef) {
@@ -250,9 +298,19 @@ export function resetEnemies(sceneRef) {
 
 
 
+
 /* ---------- Damage ---------- */
+// Was this shot fired by the player? (his shots start at his own position)
+function fromPlayer(from) {
+  if (!from || !lastPlayer) return false;
+  return Math.hypot(from.x - lastPlayer.x, from.z - lastPlayer.z) < FROM_PLAYER_R;
+}
+
+
+
 export function hurtEnemy(e, amount, from) {
   if (!e || e.dead) return false;
+  amount *= fromPlayer(from) ? C.player : C.soldier;
   e.hp -= amount;
   if (e.hp <= 0) {
     e.hp = 0; e.dead = true; e.moving = false; e.deadT = 0;
@@ -270,6 +328,7 @@ export function hurtEnemy(e, amount, from) {
 }
 
 
+
 function wake(e, from) {
   if (e.state === 'fight') return;
   e.state = 'search';
@@ -277,6 +336,7 @@ function wake(e, from) {
   if (from) { e.lastX = from.x; e.lastZ = from.z; }
   else { e.lastX = e.x; e.lastZ = e.z; }
 }
+
 
 
 // One enemy spotted something: guards nearby run to that spot
@@ -287,6 +347,7 @@ function shout(e, t) {
     if (Math.hypot(o.x - e.x, o.z - e.z) < D.shout) wake(o, { x: t.x, z: t.z });
   }
 }
+
 
 
 
@@ -321,11 +382,13 @@ function sense(e, player) {
 
 
 
+
 /* ---------- Movement ---------- */
 // Walk towards (tx, tz) along a path. Returns true when there (or when no route exists).
 function goTo(e, tx, tz, dt, run) {
   const dist = Math.hypot(tx - e.x, tz - e.z);
   if (dist < ARRIVE) { e.moving = false; e.path = []; return true; }
+
 
 
   e.repathT -= dt;
@@ -340,9 +403,11 @@ function goTo(e, tx, tz, dt, run) {
   }
 
 
+
   let wp = e.path[e.pi];
   while (wp && Math.hypot(wp.x - e.x, wp.z - e.z) < 0.4) { e.pi++; wp = e.path[e.pi]; }
   if (!wp) { e.moving = false; return false; }
+
 
 
   e.moving = true;
@@ -364,14 +429,17 @@ function goTo(e, tx, tz, dt, run) {
 
 
 
+
 /* ---------- Shooting ---------- */
 function shoot(e, tgt, isPlayer) {
   // the line must be clear right now (never shoot through a wall)
   if (!lineClear(e.x, e.z, tgt.x, tgt.z)) { e.seen = false; return; }
   e.char.fire();
   const dist = Math.hypot(tgt.x - e.x, tgt.z - e.z);
-  const chance = Math.max(D.hitMin, D.hitBase - dist * D.hitFall) + (e.elite ? D.eliteAim : 0);
+  const chance = Math.max(D.hitMin, D.hitBase - dist * D.hitFall) + (e.elite ? D.eliteAim : 0) +
+                 (isPlayer ? 0 : C.bonus);                  // v3: soldiers are easier to hit
   const hit = Math.random() < chance;
+
 
 
   const sx = e.x + Math.sin(e.heading) * 0.6, sz = e.z + Math.cos(e.heading) * 0.6;
@@ -385,12 +453,14 @@ function shoot(e, tgt, isPlayer) {
   addTracer(sx, sy, sz, tx, ty, tz);
 
 
+
   if (hit) {
     if (isPlayer) hooks.hurtPlayer(D.damage, e.x, e.z);
-    else if (typeof tgt.hurt === 'function') tgt.hurt(D.damage);   // a base guard
-    else hooks.hurtSoldier(tgt, D.damage);                          // a trained soldier
+    else if (typeof tgt.hurt === 'function') tgt.hurt(D.damage * C.take);   // a base guard
+    else hooks.hurtSoldier(tgt, D.damage * C.take);                          // a trained soldier
   }
 }
+
 
 
 
@@ -416,10 +486,12 @@ function think(e, dt, player) {
   }
 
 
+
   // 2) act
   if (e.state === 'fight') {
     const tgt = e.target;
     if (!tgt || (tgt.dead) || (e.isPlayerTarget && player && player.dead)) e.seen = false;
+
 
 
     if (e.seen) {
@@ -429,6 +501,7 @@ function think(e, dt, player) {
       if (away > LEASH) { e.state = 'return'; return; }
       if (dist > D.engage) goTo(e, tgt.x, tgt.z, dt, true);
       else e.moving = false;
+
 
 
       const want = Math.atan2(tgt.x - e.x, tgt.z - e.z);
@@ -462,13 +535,16 @@ function think(e, dt, player) {
 
 
 
+
 /* ---------- Per-frame update ---------- */
 export function updateEnemies(dt, player) {
   if (!scene) return;
+  lastPlayer = player || null;
   if (!spawned && hooks.isReady()) { spawned = true; spawnTown(); }
   updateTracers(dt);
   if (!enemies.length) return;
   pathBudget = 1;
+
 
 
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -480,6 +556,7 @@ export function updateEnemies(dt, player) {
     }
     think(e, dt, player);
   }
+
 
 
   // keep enemies from standing inside each other
@@ -501,6 +578,7 @@ export function updateEnemies(dt, player) {
   }
 
 
+
   for (const e of enemies) {
     if (!e.dead) {
       const f = resolveCollision(e.x, e.z, BODY_R);
@@ -511,6 +589,7 @@ export function updateEnemies(dt, player) {
     if (!e.dead) e.char.play(e.moving ? (e.runNow ? 'run' : 'walk') : 'idle');
   }
 }
+
 
 
 
