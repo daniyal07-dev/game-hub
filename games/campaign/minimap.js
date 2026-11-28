@@ -1,7 +1,10 @@
-// games/campaign/minimap.js  (REPLACEMENT)
+// games/campaign/minimap.js  (REPLACEMENT)   v2
 // GTA-style round minimap (top-right) + big island map (map key, default M).
 // Everything is drawn from the real island data: terrain height, roads, runway,
 // pads, fences, buildings, gates, pier. Loaded by extras.js (no changes needed elsewhere).
+//
+// v2: drones (red diamonds) and robots (big red squares) now show on the radar too,
+//     with the same range rule as the soldiers.
 //
 // Realism: the radar shows enemies only within RADAR_RANGE of you or of one of your
 // soldiers. The big map never shows enemies, only places and your own people.
@@ -10,12 +13,14 @@
 // If ctx.guideRoute is set (by guide.js), a cyan route line is drawn on both maps.
 
 
+
 import { heightAt, zoneAt, WORLD } from './terrain.js';
 import {
   ROADS, RUNWAY, PADS, BUILDINGS, FENCES, GATES, PIER, PLACES,
   sampleRoad, airPoint
 } from './layout.js';
 import { key, label } from './keybinds.js';
+
 
 
 
@@ -30,7 +35,9 @@ const TERRAIN_N = 384;          // terrain picture resolution
 const ROWS_PER_FRAME = 24;      // how many rows are painted per frame (keeps the game smooth)
 
 
+
 const MARGIN = 35;              // extra metres around the island on the big map
+
 
 
 const SHORT = {                 // names shown on the big map
@@ -45,6 +52,7 @@ const SHORT = {                 // names shown on the big map
 
 
 
+
 /* ---------- Map key (read from keybinds.js, default M) ---------- */
 function mapKey() {
   try { return key('map') || 'KeyM'; } catch (e) { return 'KeyM'; }
@@ -55,6 +63,7 @@ function mapLabel() {
 
 
 
+
 /* ---------- State ---------- */
 let mini = null, mctx = null, big = null, bctx = null;
 let wrap = null, zoneEl = null, overlay = null, footEl = null;
@@ -62,13 +71,85 @@ let bigOpen = false;
 let miniT = 0, bigT = 0, zoneT = 0;
 
 
+
 let terrainCv = null, tctx = null, timg = null;
 let rowsDone = 0, terrainDone = false;
+
 
 
 let roadPaths = null;           // [{ path, width }]
 let fencePath = null;
 let bounds = null;
+
+
+
+/* drones and robots (found when the game starts) */
+let droneFn = null;             // getDrones()
+let robotFns = [];              // any getRobots / getMechs / getTurrets functions found
+
+
+
+
+/* ======================================================================
+   DRONES AND ROBOTS (looked up safely, a missing file never breaks the map)
+   ====================================================================== */
+function findAir() {
+  import('./drones.js').then((m) => {
+    if (typeof m.getDrones === 'function') droneFn = m.getDrones;
+    console.log('[minimap] drones on the radar: ' + (droneFn ? 'yes' : 'no (getDrones not found)'));
+  }).catch(() => { droneFn = null; });
+
+  import('./robots.js').then((m) => {
+    robotFns = [];
+    for (const name of Object.keys(m)) {
+      if (typeof m[name] === 'function' && /^get.*(robot|mech|turret)/i.test(name)) robotFns.push(m[name]);
+    }
+    console.log('[minimap] robots on the radar: ' + (robotFns.length ? 'yes (' + robotFns.length + ' list)' : 'no (no getRobots / getMechs / getTurrets found)'));
+  }).catch(() => { robotFns = []; });
+}
+
+function posOf(e) {
+  if (typeof e.x === 'number' && typeof e.z === 'number') return { x: e.x, z: e.z };
+  const o = e.group || e.g || e.mesh || e.root || e.obj;
+  if (o && o.position) return { x: o.position.x, z: o.position.z };
+  return null;
+}
+
+function isGone(e) {
+  if (e.dead || e.destroyed || e.removed) return true;
+  if (typeof e.hp === 'number' && e.hp <= 0) return true;
+  return false;
+}
+
+// every living drone and robot as { x, z, big }
+function machines() {
+  const out = [];
+  try {
+    if (droneFn) {
+      const list = droneFn();
+      if (Array.isArray(list)) {
+        for (const d of list) {
+          if (!d || isGone(d)) continue;
+          const p = posOf(d);
+          if (p) out.push({ x: p.x, z: p.z, big: false });
+        }
+      }
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    for (const fn of robotFns) {
+      const list = fn();
+      if (!Array.isArray(list)) continue;
+      for (const r of list) {
+        if (!r || isGone(r)) continue;
+        const p = posOf(r);
+        if (p) out.push({ x: p.x, z: p.z, big: true });
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return out;
+}
+
 
 
 
@@ -80,6 +161,7 @@ const STOPS = [
   [0.3, 222, 208, 160], [1.4, 214, 200, 150], [3, 128, 166, 92], [15, 92, 134, 70],
   [40, 112, 112, 98], [75, 186, 186, 182]
 ];
+
 
 
 function colorFor(h, out) {
@@ -100,7 +182,9 @@ function colorFor(h, out) {
 }
 
 
+
 const rgb = [0, 0, 0];
+
 
 
 function genTerrain() {
@@ -146,6 +230,7 @@ function genTerrain() {
 
 
 
+
 /* ======================================================================
    STATIC SHAPES (built once from layout.js)
    ====================================================================== */
@@ -161,12 +246,14 @@ function buildShapes() {
   addLine(RUNWAY.points.map((q) => ({ x: q[0], z: q[1] })), RUNWAY.width);
 
 
+
   fencePath = new Path2D();
   for (const f of FENCES) {
     fencePath.moveTo(f.points[0][0], f.points[0][1]);
     for (let i = 1; i < f.points.length; i++) fencePath.lineTo(f.points[i][0], f.points[i][1]);
     fencePath.closePath();
   }
+
 
 
   // island bounds for the big map
@@ -186,6 +273,7 @@ function buildShapes() {
 
 
 
+
 /* ======================================================================
    DRAWING
    v = view { cx, cy, s, px, pz, a }: the world point (px, pz) is shown at pixel
@@ -198,12 +286,14 @@ function w2s(v, x, z) {
 }
 
 
+
 function placeColor(b) {
   if (b.type === 'house') return '#cfa97c';
   if (b.place === 'base') return '#6fbf73';
   if (b.place === 'airfield') return '#9db4c9';
   return '#d98a6a';
 }
+
 
 
 function drawWorld(c, v) {
@@ -215,6 +305,7 @@ function drawWorld(c, v) {
   const px1 = 1 / v.s;                          // one screen pixel in metres
 
 
+
   // terrain
   if (terrainCv) {
     const half = WORLD.size / 2;
@@ -223,12 +314,14 @@ function drawWorld(c, v) {
   }
 
 
+
   // roads and runway
   c.lineCap = 'round'; c.lineJoin = 'round';
   if (roadPaths) {
     for (const r of roadPaths) { c.lineWidth = r.width + 2 * px1; c.strokeStyle = '#23272d'; c.stroke(r.path); }
     for (const r of roadPaths) { c.lineWidth = r.width; c.strokeStyle = r.width > 20 ? '#666b73' : '#4d535b'; c.stroke(r.path); }
   }
+
 
 
   // pads
@@ -246,6 +339,7 @@ function drawWorld(c, v) {
   }
 
 
+
   // fences
   if (fencePath) {
     c.setLineDash([4, 3]);
@@ -254,6 +348,7 @@ function drawWorld(c, v) {
     c.stroke(fencePath);
     c.setLineDash([]);
   }
+
 
 
   // pier
@@ -265,6 +360,7 @@ function drawWorld(c, v) {
     c.fillRect(-PIER.width / 2, -PIER.length / 2, PIER.width, PIER.length);
     c.restore();
   }
+
 
 
   // buildings (the small mark is the door side)
@@ -285,13 +381,16 @@ function drawWorld(c, v) {
   }
 
 
+
   // gates
   c.fillStyle = '#ffd84a';
   for (const g of GATES) c.fillRect(g.x - 1.6, g.z - 1.6, 3.2, 3.2);
 
 
+
   c.restore();
 }
+
 
 
 // cyan route line (GPS style). route = [{x, z}, ...] set by guide.js
@@ -310,6 +409,7 @@ function drawRoute(c, v, route, width) {
 }
 
 
+
 function starPath(c, x, y, r) {
   c.beginPath();
   for (let i = 0; i < 10; i++) {
@@ -320,6 +420,7 @@ function starPath(c, x, y, r) {
   }
   c.closePath();
 }
+
 
 
 function icon(c, kind, x, y, size, alpha) {
@@ -339,6 +440,7 @@ function icon(c, kind, x, y, size, alpha) {
 }
 
 
+
 function drawArrow(c, x, y, scale, rot) {
   c.save();
   c.translate(x, y);
@@ -352,6 +454,7 @@ function drawArrow(c, x, y, scale, rot) {
 }
 
 
+
 function dot(c, x, y, r, fill, alpha) {
   c.globalAlpha = alpha;
   c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
@@ -359,6 +462,23 @@ function dot(c, x, y, r, fill, alpha) {
   c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,255,255,0.9)'; c.stroke();
   c.globalAlpha = 1;
 }
+
+// drone = diamond, robot = square (both red, so they read as enemies)
+function machineMark(c, x, y, big, alpha) {
+  c.globalAlpha = alpha;
+  c.beginPath();
+  if (big) {
+    c.rect(x - 5, y - 5, 10, 10);
+  } else {
+    c.moveTo(x, y - 5.5); c.lineTo(x + 5.5, y); c.lineTo(x, y + 5.5); c.lineTo(x - 5.5, y);
+    c.closePath();
+  }
+  c.fillStyle = big ? '#ff1f1f' : '#ff5a2d';
+  c.fill();
+  c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,255,255,0.9)'; c.stroke();
+  c.globalAlpha = 1;
+}
+
 
 
 function enemySeen(e, p, soldiers) {
@@ -375,11 +495,13 @@ function enemySeen(e, p, soldiers) {
 
 
 
+
 /* ---------- Minimap ---------- */
 function drawMini(ctx) {
   const p = ctx.player;
   const S = MINI_SIZE, R = S / 2;
   const v = { cx: R, cy: R, s: MINI_SCALE, px: p.x, pz: p.z, a: p.yaw };
+
 
 
   mctx.clearRect(0, 0, S, S);
@@ -390,8 +512,10 @@ function drawMini(ctx) {
   drawWorld(mctx, v);
 
 
+
   // guide route (cyan line), if guide.js has set one
   drawRoute(mctx, v, ctx.guideRoute, 3);
+
 
 
   // your view cone
@@ -401,6 +525,7 @@ function drawMini(ctx) {
   mctx.closePath();
   mctx.fillStyle = 'rgba(255,255,255,0.12)';
   mctx.fill();
+
 
 
   // objective icons (stick to the rim when far away)
@@ -419,6 +544,7 @@ function drawMini(ctx) {
   }
 
 
+
   // your soldiers (blue)
   const soldiers = ctx.getSoldiers() || [];
   for (const s of soldiers) {
@@ -426,6 +552,7 @@ function drawMini(ctx) {
     const [sx, sy] = w2s(v, s.x, s.z);
     if (Math.hypot(sx - R, sy - R) < R - 4) dot(mctx, sx, sy, 3.6, '#2f7bff', 1);
   }
+
 
 
   // enemies (red), radar style
@@ -437,10 +564,19 @@ function drawMini(ctx) {
     if (Math.hypot(sx - R, sy - R) < R - 4) dot(mctx, sx, sy, 3.8, '#ff2d2d', pulse);
   }
 
+  // drones (diamonds) and robots (squares), same radar range
+  for (const m of machines()) {
+    if (!enemySeen(m, p, soldiers)) continue;
+    const [sx, sy] = w2s(v, m.x, m.z);
+    if (Math.hypot(sx - R, sy - R) < R - 5) machineMark(mctx, sx, sy, m.big, pulse);
+  }
+
+
 
   // you
   drawArrow(mctx, R, R, 1, 0);
   mctx.restore();
+
 
 
   // rim + north marker
@@ -456,12 +592,14 @@ function drawMini(ctx) {
 
 
 
+
 /* ---------- Big map ---------- */
 function outlineText(c, text, x, y, font, fill) {
   c.font = font; c.textAlign = 'center'; c.textBaseline = 'middle';
   c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.85)'; c.strokeText(text, x, y);
   c.fillStyle = fill; c.fillText(text, x, y);
 }
+
 
 
 function drawBig(ctx) {
@@ -472,13 +610,16 @@ function drawBig(ctx) {
   const v = { cx: W / 2, cy: H / 2, s, px: (bounds.x0 + bounds.x1) / 2, pz: (bounds.z0 + bounds.z1) / 2, a: 0 };
 
 
+
   bctx.fillStyle = '#1c4f78';
   bctx.fillRect(0, 0, W, H);
   drawWorld(bctx, v);
 
 
+
   // guide route (cyan line), if guide.js has set one
   drawRoute(bctx, v, ctx.guideRoute, 3);
+
 
 
   // place names
@@ -496,6 +637,7 @@ function drawBig(ctx) {
   }
 
 
+
   // building names
   for (const b of BUILDINGS) {
     const t = SHORT[b.id];
@@ -503,6 +645,7 @@ function drawBig(ctx) {
     const [sx, sy] = w2s(v, b.x, b.z);
     outlineText(bctx, t, sx, sy + (b.d * s) / 2 + 8, '600 9px Consolas,monospace', '#ffffff');
   }
+
 
 
   // icons
@@ -515,6 +658,7 @@ function drawBig(ctx) {
   }
 
 
+
   // your soldiers, then you
   for (const sd of (ctx.getSoldiers() || [])) {
     if (sd.dead) continue;
@@ -523,6 +667,7 @@ function drawBig(ctx) {
   }
   const [ux, uy] = w2s(v, p.x, p.z);
   drawArrow(bctx, ux, uy, 1.3, -p.yaw);
+
 
 
   // legend
@@ -535,6 +680,7 @@ function drawBig(ctx) {
   bctx.fillStyle = '#7fb0ff'; bctx.fillText('B BARRACKS', 238, H - 22);
   bctx.fillStyle = '#ffcc33'; bctx.fillText('★ TOWN HALL', 342, H - 22);
 }
+
 
 
 function setBig(on) {
@@ -550,6 +696,7 @@ function setBig(on) {
     overlay.style.display = 'none';
   }
 }
+
 
 
 
@@ -574,6 +721,7 @@ export function init(ctx) {
   document.body.appendChild(wrap);
 
 
+
   // big map overlay
   overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:40;display:none;' +
@@ -591,13 +739,17 @@ export function init(ctx) {
   document.body.appendChild(overlay);
 
 
+
   buildShapes();
-  console.log('[minimap] ready. ' + mapLabel() + ' = big map');
+  findAir();
+  console.log('[minimap] v2 ready. ' + mapLabel() + ' = big map');
 }
+
 
 
 export function update(dt, ctx) {
   genTerrain();                                   // keeps painting until the picture is complete
+
 
 
   const show = ctx.isPlaying() && !ctx.player.dead;
@@ -605,8 +757,10 @@ export function update(dt, ctx) {
   if (!show) { if (bigOpen) setBig(false); return; }
 
 
+
   miniT += dt;
   if (miniT >= 1 / MINI_FPS) { miniT = 0; drawMini(ctx); }
+
 
 
   zoneT += dt;
@@ -616,11 +770,13 @@ export function update(dt, ctx) {
   }
 
 
+
   if (bigOpen) {
     bigT += dt;
     if (bigT >= 1 / BIG_FPS) { bigT = 0; drawBig(ctx); }
   }
 }
+
 
 
 export function onKey(code, ctx) {
@@ -629,9 +785,11 @@ export function onKey(code, ctx) {
 }
 
 
+
 export function onEvent(name) {
   if ((name === 'died' || name === 'restart') && bigOpen) setBig(false);
 }
+
 
 
 export function reset() {

@@ -1,5 +1,5 @@
 // ============================================================
-//  NOVA STRIKE 3D — Campaign: games/campaign/vehicles.js  (v1)
+//  NOVA STRIKE 3D — Campaign: games/campaign/vehicles.js  (v3)
 //  The ARMY TRUCK (built from code, no model file).
 //    E near the truck = get in / get out      V = first / third person
 //    W A S D (or arrows) drive, SPACE handbrake, SHIFT boost
@@ -13,12 +13,25 @@
 //  Does not touch main.js or player.js. Loaded by extras.js.
 //  Exports buildTruck() so the enemy truck can reuse the model.
 //  Console: vehicles()  vehicles({view:'tpp', fwd:22, here:true, require:false})
+//
+//  v2: sharp-turn fixes. Gloves ride on the steering wheel and the
+//      arms follow them, smaller wheel turn, limited turn rate (less
+//      steering at speed), third person camera eases behind the truck,
+//      the truck will not rotate into walls/trees, calmer slope tilt.
+//      Hands are hidden while parked, crosshair comes back after
+//      getting out.
+//  v3: soldiers are really hidden while riding (body = s.char.group),
+//      riders cannot shoot or walk off, they get out facing the truck's
+//      direction, and the truck HUD / prompt / buttons are hidden while
+//      the game is paused.
 // ============================================================
 import * as THREE from 'three';
 import { resolve, blockedAt, groundHeight, onPier } from './collision.js';
 import { heightAt, SPAWN, WORLD } from './terrain.js';
 import { hurtEnemy } from './enemies.js';
 import { matches, isDown } from './keybinds.js';
+
+
 
 
 // ---------- knobs ----------
@@ -36,21 +49,28 @@ const COAST = 3;                  // slowing down with no key
 const HAND = 22;                  // handbrake (SPACE)
 const WHEELBASE = 4.2;            // steering geometry
 const MAX_STEER = 0.55;           // wheel angle (rad) at standstill
+const STEER_FAST = 0.75;          // how much steering is taken away at top speed (0..1)
+const MAX_YAW_RATE = 1.1;         // the truck never turns faster than this (rad/s)
 const STEER_IN = 2.4, STEER_OUT = 3.2;   // how fast the wheels turn / come back
 const WHEEL_R = 0.55;
-const WHEEL_TURN = 3.5;           // steering wheel turns this much per wheel angle
+const WHEEL_TURN = 2.4;           // steering wheel turns this much per wheel angle
 const CR = 1.4;                   // collision circle radius
 const CIRCLES = [-2.6, -0.9, 0.9, 2.6];  // collision circles along the truck (m)
 const WATER_BLOCK = -1.4;         // same as main.js: deep water stops you
 const EYE_LOCAL = new THREE.Vector3(-0.55, 1.98, -0.95);   // driver's eyes inside the cab
 const LOOK_YAW = 1.9;             // how far you may look left / right in the cab (rad)
 const TPP_DIST = 9.5;             // third person camera distance
+const TPP_FOLLOW = 2.2;           // how fast the third person camera swings behind the truck
+const TILT_FOLLOW = 5;            // how fast the truck follows slopes (smaller = calmer)
+const MAX_PITCH = 0.35, MAX_ROLL = 0.3;   // largest tilt on slopes (rad)
 let ROADKILL_SPEED = 5;           // m/s needed to hit an enemy
 let ROADKILL_DMG = 250;
 const ENGINE_VOL = 0.05;
 const VIEW_KEY = 'campaign_truckview';
 const PHONE = (typeof matchMedia === 'function' &&
                matchMedia('(hover: none) and (pointer: coarse)').matches);
+
+
 
 
 // ---------- state ----------
@@ -68,6 +88,8 @@ const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector
 const PP = { x: 0, z: 0 };
 
 
+
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 const isPlay = () => !!(C && C.isPlaying && C.isPlaying());
@@ -77,8 +99,12 @@ function isUse(code) {
 }
 
 
-// ---------- reading / moving soldiers and enemies (works with different data layouts) ----------
+
+
+// ---------- reading / moving soldiers and enemies ----------
+// A soldier from units.js is { char, x, z, heading, hp, ... }; his 3D body is s.char.group.
 function groupOf(e) {
+  if (e.char && e.char.group) return e.char.group;
   const u = e.unit || e.u || e;
   return u.group || u.model || e.group || e.model || u.mesh || e.mesh || u.obj || e.obj || null;
 }
@@ -104,6 +130,24 @@ function place(s, x, y, z) {
   const g = groupOf(s);
   if (g && g.position) g.position.set(x, y, z);
 }
+// show / hide a soldier's body; returns true if a body was found
+function setShown(s, on) {
+  const g = groupOf(s);
+  if (g) g.visible = on;
+  return !!g;
+}
+// every frame a rider is inside: no target, no shooting, no walking off
+function holdRider(s) {
+  s.aim = null;
+  s.fireT = 1;
+  s.path = [];
+  s.pi = 0;
+  s.repathT = 1;
+  s.moving = false;
+  s.stuckT = 0;
+}
+
+
 
 
 // ============================================================
@@ -125,15 +169,8 @@ function makeEmblem(color) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-function limb(parent, a, b, r, mat) {
-  const d = new THREE.Vector3().subVectors(b, a);
-  const len = d.length();
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, len, 8), mat);
-  m.position.copy(a).addScaledVector(d, 0.5);
-  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
-  parent.add(m);
-  return m;
-}
+
+
 
 
 // Truck origin = ground, middle of the truck. The front points to -Z (like the camera).
@@ -156,6 +193,8 @@ export function buildTruck(o = {}) {
   const mTail = new THREE.MeshBasicMaterial({ color: 0xc01818 });
 
 
+
+
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
   const box = (w, h, d, mat, x, y, z, cast = true, parent = g) => {
@@ -165,6 +204,8 @@ export function buildTruck(o = {}) {
     parent.add(m);
     return m;
   };
+
+
 
 
   // chassis, hood, bumper, grille, lights
@@ -185,6 +226,8 @@ export function buildTruck(o = {}) {
   }
   const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 8), mDark);
   ex.position.set(1.3, 1.9, -0.25); g.add(ex);
+
+
 
 
   // cab (thin panels, so you can look out of the windows from inside)
@@ -209,6 +252,8 @@ export function buildTruck(o = {}) {
   }
 
 
+
+
   // star on both doors
   const emb = makeEmblem(o.emblem || '#e8efe0');
   for (const sx of [-1, 1]) {
@@ -218,6 +263,8 @@ export function buildTruck(o = {}) {
     pl.rotation.y = sx * Math.PI / 2;
     g.add(pl);
   }
+
+
 
 
   // cargo bed and canvas cover
@@ -231,6 +278,8 @@ export function buildTruck(o = {}) {
   cover.position.set(0, 1.82, 1.75);
   cover.castShadow = true;
   g.add(cover);
+
+
 
 
   // wheels: 3 axles. The front pair steers. 'spin' turns when rolling.
@@ -256,6 +305,8 @@ export function buildTruck(o = {}) {
   }
 
 
+
+
   // steering wheel (tilted toward the driver) + the part that turns
   const tilt = new THREE.Group();
   tilt.position.set(-0.55, 1.62, -1.72);
@@ -273,23 +324,47 @@ export function buildTruck(o = {}) {
   col.rotation.x = Math.PI / 2; col.position.z = -0.25; tilt.add(col);
 
 
-  // gloved hands on the rim + arms going toward the driver (first person only)
+
+
+  // gloved hands: the gloves ride ON the wheel rim (they turn with it),
+  // the arms are stretched every frame from a fixed elbow to each glove.
   g.updateMatrixWorld(true);
   const hands = new THREE.Group();
   g.add(hands);
+  const gloves = [], arms = [];
   for (const sx of [-1, 1]) {
     const hp = tilt.localToWorld(new THREE.Vector3(sx * 0.2, 0.01, 0));
     const glove = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mGlove);
     glove.scale.set(1, 0.8, 1.25);
-    glove.position.copy(hp);
-    hands.add(glove);
-    const elbow = new THREE.Vector3(hp.x + sx * 0.14, hp.y - 0.34, hp.z + 0.8);
-    limb(hands, hp, elbow, 0.045, mSleeve);
+    glove.position.set(sx * 0.2, 0.01, 0);
+    steer.add(glove);
+    gloves.push(glove);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 1, 8), mSleeve);
+    hands.add(arm);
+    arms.push({ mesh: arm, glove, elbow: new THREE.Vector3(hp.x + sx * 0.14, hp.y - 0.34, hp.z + 0.8) });
   }
+  const wp = new THREE.Vector3(), dv = new THREE.Vector3(), upV = new THREE.Vector3(0, 1, 0);
+  const poseArms = () => {                 // call after the truck's matrices are updated
+    for (const r of arms) {
+      r.glove.getWorldPosition(wp);
+      g.worldToLocal(wp);
+      dv.subVectors(wp, r.elbow);
+      const len = Math.max(0.01, dv.length());
+      r.mesh.position.copy(r.elbow).addScaledVector(dv, 0.5);
+      r.mesh.quaternion.setFromUnitVectors(upV, dv.divideScalar(len));
+      r.mesh.scale.set(1, len, 1);
+    }
+  };
+  const setHands = (show) => { hands.visible = show; for (const gl of gloves) gl.visible = show; };
+  setHands(false);
 
 
-  return { group: g, spinners, fronts, steer, hands };
+
+
+  return { group: g, spinners, fronts, steer, hands, setHands, poseArms };
 }
+
+
 
 
 // ============================================================
@@ -302,6 +377,14 @@ function spotOK(x, z, h) {
     if (blockedAt(cx, cz, CR) || !walkOK(cx, cz)) return false;
   }
   return true;
+}
+// true if turning to heading h at (x, z) would push the truck into something
+function turnBlocked(x, z, h) {
+  const s = Math.sin(h), c = Math.cos(h);
+  for (const o of CIRCLES) {
+    if (blockedAt(x + s * o, z + c * o, CR * 0.85)) return true;
+  }
+  return false;
 }
 function findHome() {
   const bx = SPAWN.x + 9, bz = SPAWN.z + 7, h = -Math.PI / 2;     // beside the start, facing east (the gate)
@@ -345,6 +428,8 @@ function build(ctx) {
 }
 
 
+
+
 // ============================================================
 //  SCREEN PARTS
 // ============================================================
@@ -371,6 +456,8 @@ function ensureUi() {
   ui.btns.innerHTML = '<button data-a="view">VIEW</button><button data-a="out">GET OUT</button>';
 
 
+
+
   const tap = (el, fn) => {
     el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
     el.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
@@ -387,6 +474,8 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { ui.toast.style.display = 'none'; }, 1800);
 }
+
+
 
 
 // ---------- engine sound (made in code) ----------
@@ -420,11 +509,15 @@ function engineTick(on, sf, thr) {
 }
 
 
+
+
 // ============================================================
 //  GETTING IN / OUT
 // ============================================================
 function nearTruck(p) { return Math.hypot(p.x - T.x, p.z - T.z) < ENTER_R; }
 function unlocked() { return !REQUIRE_SOLDIER || (C.getSoldiers && C.getSoldiers().length > 0); }
+
+
 
 
 function boardSoldiers() {
@@ -443,8 +536,8 @@ function boardSoldiers() {
   let hidden = 0;
   for (const c of cand.slice(0, MAX_SOLDIERS)) {
     cargo.push(c.s);
-    const g = groupOf(c.s);
-    if (g) { g.visible = false; hidden++; }
+    holdRider(c.s);
+    if (setShown(c.s, false)) hidden++;
   }
   console.log('[vehicles] ' + cargo.length + ' soldiers climbed in (' + hidden + ' hidden)' +
               (unreadable ? ' · ' + unreadable + ' soldiers have no readable position' : ''));
@@ -453,18 +546,35 @@ function boardSoldiers() {
 function unloadSoldiers() {
   const sh = Math.sin(T.h), ch = Math.cos(T.h);
   cargo.forEach((s, i) => {
-    const g = groupOf(s);
-    if (isDead(s)) { if (g) g.visible = true; return; }
+    if (isDead(s)) return;                       // a soldier who died inside stays hidden until units.js removes him
     const row = Math.floor(i / 4), col = (i % 4) - 1.5;
     let x = T.x + sh * (4.8 + row * 1.4) + ch * col * 1.4;
     let z = T.z + ch * (4.8 + row * 1.4) - sh * col * 1.4;
     const r = resolve(x, z, 0.45);
     x = r.x; z = r.z;
     place(s, x, groundHeight(x, z) + 0.15, z);
-    if (g) g.visible = true;
+    s.heading = T.h;
+    s.hold = { x, z, heading: T.h };             // 'hold' keeps them here, 'follow' walks them to their slots
+    s.path = []; s.pi = 0; s.repathT = 0; s.moving = false;
+    s.aim = null; s.fireT = 0.4;
+    if (s.char && s.char.setPose) s.char.setPose(x, z, T.h);
+    setShown(s, true);
   });
   cargo = [];
 }
+
+
+
+
+// gives the normal on-foot screen parts back after driving
+function restoreView() {
+  const ch = document.getElementById('crosshair');
+  if (ch) ch.style.visibility = '';
+  const gr = (C && C.camera) ? C.camera.getObjectByName('scope-rig') : null;
+  if (gr) gr.visible = true;
+}
+
+
 
 
 function enter() {
@@ -483,6 +593,8 @@ function enter() {
 }
 
 
+
+
 function leave(force, silent) {
   if (!driving) return;
   if (!force && Math.abs(T.speed) > EXIT_SPEED) { toast('Slow down to get out'); return; }
@@ -490,6 +602,7 @@ function leave(force, silent) {
   T.speed = 0;
   unloadSoldiers();
   engineTick(false, 0, 0);
+  restoreView();
   if (silent) return;
   const p = C.player, cam = C.camera;
   const rx = Math.cos(T.h), rz = -Math.sin(T.h);
@@ -512,11 +625,15 @@ function leave(force, silent) {
 }
 
 
+
+
 function toggleView() {
   view = view === 'fpp' ? 'tpp' : 'fpp';
   try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* ignore */ }
   toast(view === 'fpp' ? 'VIEW: DRIVER SEAT' : 'VIEW: BEHIND THE TRUCK');
 }
+
+
 
 
 // ============================================================
@@ -536,6 +653,8 @@ function drive(dt, p, cam, playing) {
     const before = T.speed;
 
 
+
+
     // speed
     const maxF = MAX_FWD * (boost ? BOOST : 1);
     let tgt = thr > 0 ? thr * maxF : thr < 0 ? thr * MAX_REV : 0, rate;
@@ -546,13 +665,24 @@ function drive(dt, p, cam, playing) {
     T.speed += clamp(tgt - T.speed, -rate * dt, rate * dt);
 
 
-    // steering (less sharp when fast) and heading
-    const maxSt = MAX_STEER * (1 - 0.55 * Math.min(1, Math.abs(T.speed) / MAX_FWD));
+
+
+    // steering (much less sharp when fast) and heading
+    const maxSt = MAX_STEER * (1 - STEER_FAST * Math.min(1, Math.abs(T.speed) / MAX_FWD));
     const sr = Math.abs(st) > 0.02 ? STEER_IN : STEER_OUT;
     T.steer += clamp(st * maxSt - T.steer, -sr * dt, sr * dt);
-    const dh = T.speed / WHEELBASE * Math.tan(T.steer) * dt;
+    let dh = T.speed / WHEELBASE * Math.tan(T.steer) * dt;
+    dh = clamp(dh, -MAX_YAW_RATE * dt, MAX_YAW_RATE * dt);
+    // do not swing the truck's body into a wall or tree it was not touching
+    if (Math.abs(dh) > 1e-5 && turnBlocked(T.x, T.z, T.h + dh) && !turnBlocked(T.x, T.z, T.h)) {
+      dh = 0;
+      T.speed *= 0.98;
+    }
     T.h += dh;
-    p.yaw += dh;                                          // the view turns with the truck
+    if (view === 'fpp') p.yaw += dh;                      // the cab view turns with the truck
+    else if (Math.abs(T.speed) > 0.5) p.yaw += wrapA(T.h - p.yaw) * Math.min(1, dt * TPP_FOLLOW);   // chase camera swings behind
+
+
 
 
     // move, with water and collision checks
@@ -581,6 +711,8 @@ function drive(dt, p, cam, playing) {
     T.z = clamp(nz, -half, half);
 
 
+
+
     // roadkill
     if (Math.abs(T.speed) > ROADKILL_SPEED && C.getEnemies) {
       const now = performance.now();
@@ -603,22 +735,27 @@ function drive(dt, p, cam, playing) {
   }
 
 
-  // follow the ground
+
+
+  // follow the ground (calm: small tilt limits and slow follow)
   {
     const s = Math.sin(T.h), c = Math.cos(T.h), fx = -s, fz = -c;
     const hF = groundHeight(T.x + fx * 2.6, T.z + fz * 2.6);
     const hR = groundHeight(T.x - fx * 2.6, T.z - fz * 2.6);
     const hRt = groundHeight(T.x + c * 1.1, T.z - s * 1.1);
     const hL = groundHeight(T.x - c * 1.1, T.z + s * 1.1);
-    const k = Math.min(1, dt * 8);
-    T.pitch += (clamp(Math.atan2(hF - hR, 5.2), -0.5, 0.5) - T.pitch) * k;
-    T.roll += (clamp(Math.atan2(hRt - hL, 2.2), -0.5, 0.5) - T.roll) * k;
+    const k = Math.min(1, dt * TILT_FOLLOW);
+    T.pitch += (clamp(Math.atan2(hF - hR, 5.2), -MAX_PITCH, MAX_PITCH) - T.pitch) * k;
+    T.roll += (clamp(Math.atan2(hRt - hL, 2.2), -MAX_ROLL, MAX_ROLL) - T.roll) * k;
     T.y += ((hF + hR) / 2 - T.y) * Math.min(1, dt * 14);
   }
   applyTransform();
   const rot = T.speed * dt / WHEEL_R;
   for (const sp of rig.spinners) sp.rotation.x -= rot;
   M.updateMatrixWorld(true);
+  if (view === 'fpp') rig.poseArms();
+
+
 
 
   // the player goes where the truck goes
@@ -626,17 +763,23 @@ function drive(dt, p, cam, playing) {
   p.vx = p.vz = p.vy = 0; p.grounded = true; p.fly = false;
 
 
-  // soldiers in the back
+
+
+  // soldiers in the back: hidden, silent, and carried along
   for (let i = cargo.length - 1; i >= 0; i--) {
     const s = cargo[i];
     if (isDead(s)) { cargo.splice(i, 1); continue; }
     place(s, T.x, T.y + 1.2, T.z);
-    const g = groupOf(s);
-    if (g) g.visible = false;
+    holdRider(s);
+    setShown(s, false);
   }
 
 
+
+
   placeCamera(dt, p, cam);
+
+
 
 
   // no gun while driving
@@ -646,11 +789,15 @@ function drive(dt, p, cam, playing) {
   if (ch) ch.style.visibility = 'hidden';
   const gr = cam.getObjectByName('scope-rig');
   if (gr) gr.visible = false;
-  rig.hands.visible = view === 'fpp';
+  rig.setHands(view === 'fpp');
+
+
 
 
   engineTick(playing, Math.min(1, Math.abs(T.speed) / MAX_FWD), thr);
 }
+
+
 
 
 function placeCamera(dt, p, cam) {
@@ -681,10 +828,14 @@ function placeCamera(dt, p, cam) {
 }
 
 
+
+
 function onFoot(dt, p, playing) {
   // a parked truck: keep it on the ground, nothing else
   T.y += (groundHeight(T.x, T.z) - T.y) * Math.min(1, dt * 10);
 }
+
+
 
 
 function uiTick(dt, p, playing) {
@@ -698,6 +849,8 @@ function uiTick(dt, p, playing) {
   } else ui.prompt.style.display = 'none';
 
 
+
+
   beacon.visible = !driving && playing && open && dist > 14;
   if (beacon.visible) {
     beacon.position.set(T.x, T.y + 20, T.z);
@@ -705,10 +858,13 @@ function uiTick(dt, p, playing) {
   }
 
 
-  ui.hud.style.display = driving ? 'block' : 'none';
-  ui.btns.style.display = (driving && PHONE) ? 'flex' : 'none';
+
+
+  // speed panel and phone buttons only while the game is really running (not on the pause card)
+  ui.hud.style.display = (driving && playing) ? 'block' : 'none';
+  ui.btns.style.display = (driving && playing && PHONE) ? 'flex' : 'none';
   hudT -= dt;
-  if (driving && hudT <= 0) {
+  if (driving && playing && hudT <= 0) {
     hudT = 0.1;
     const kmh = Math.round(Math.abs(T.speed) * 3.6);
     const html = '<div class="h">ARMY TRUCK</div><div class="b">' + kmh + ' km/h</div>' +
@@ -719,6 +875,8 @@ function uiTick(dt, p, playing) {
 }
 
 
+
+
 // ============================================================
 //  INPUT
 // ============================================================
@@ -726,10 +884,14 @@ window.addEventListener('keydown', (e) => { down[e.code] = true; });
 window.addEventListener('keyup', (e) => { down[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in down) down[k] = false; });
 
+
+
 // left mouse must not shoot while driving (capture phase: runs before player.js)
 document.addEventListener('mousedown', (e) => {
   if (driving && e.button === 0) e.stopImmediatePropagation();
 }, true);
+
+
 
 // phone: read the joystick / brake / sprint values that touch.js sends to main.js
 function wrapTouch() {
@@ -743,14 +905,18 @@ function wrapTouch() {
 }
 
 
+
+
 // ============================================================
 //  EXTRAS INTERFACE
 // ============================================================
 export function init(ctx) {
   C = ctx;
   ensureUi();
-  console.log('[vehicles] v1 ready: army truck (E to drive, V view, up to ' + MAX_SOLDIERS + ' soldiers)');
+  console.log('[vehicles] v3 ready: army truck (E to drive, V view, up to ' + MAX_SOLDIERS + ' soldiers)');
 }
+
+
 
 export function update(dt, ctx) {
   C = ctx;
@@ -766,7 +932,11 @@ export function update(dt, ctx) {
   applyIdle();
   uiTick(dt, p, playing);
 }
-function applyIdle() { if (!driving && M) applyTransform(); }
+function applyIdle() {
+  if (!driving && M) { applyTransform(); rig.setHands(false); }
+}
+
+
 
 export function onKey(code, ctx) {
   C = ctx || C;
@@ -780,21 +950,27 @@ export function onKey(code, ctx) {
   return false;
 }
 
+
+
 export function onEvent(name, data, ctx) {
   C = ctx || C;
   if (name === 'died' && driving) leave(true);
 }
 
+
+
 export function reset(ctx) {
   C = ctx || C;
   if (!built) return;
   if (driving) leave(true, true);
-  for (const s of cargo) { const g = groupOf(s); if (g) g.visible = true; }
+  for (const s of cargo) setShown(s, true);
   cargo = [];
   roadkills = 0;
   hitAt.clear();
   goHome();
 }
+
+
 
 
 // ============================================================
@@ -804,6 +980,8 @@ window.campaignTruck = {
   isDriving: () => driving,
   state: () => ({ x: T.x, z: T.z, heading: T.h, speed: T.speed, cargo: cargo.length })
 };
+
+
 
 // vehicles({view:'tpp'|'fpp', fwd:22, accel:10, require:false, kill:250, here:true})
 window.vehicles = function (o) {

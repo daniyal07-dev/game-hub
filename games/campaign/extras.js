@@ -1,11 +1,11 @@
 // ============================================================
-//  NOVA STRIKE 3D — Campaign: games/campaign/extras.js  (v12)
+//  NOVA STRIKE 3D — Campaign: games/campaign/extras.js  (v13)
 //  The hub for the extra features. main.js talks to THIS file only.
 //  It loads these optional files from the same folder:
 //     sound.js   music.js   minimap.js   guide.js   base-npcs.js
 //     drones.js  robots.js  missions.js  waves.js   hit-fx.js
 //     weather.js gun-light.js  enemy-glow.js  scope.js
-//     aim-assist.js  vehicles.js  intro.js
+//     aim-assist.js  vehicles.js  settings.js  intro.js
 //  A file that is missing (or crashes) is switched off by itself,
 //  the game keeps running. A red "404" line in the Console for a
 //  file not written yet is normal.
@@ -38,17 +38,22 @@
 //      after scope, before intro.
 //  v12: added vehicles.js (army truck you can drive), after
 //      aim-assist, before intro.
+//  v13: added settings.js (Settings screen: aim assist, recoil,
+//      weather, truck view), after vehicles, before intro.
 // ============================================================
 
 
 
-const MODULES = ['sound', 'music', 'minimap', 'guide', 'base-npcs', 'drones', 'robots', 'missions', 'waves', 'hit-fx', 'weather', 'gun-light', 'enemy-glow', 'scope', 'aim-assist', 'vehicles', 'intro'];
+
+const MODULES = ['sound', 'music', 'minimap', 'guide', 'base-npcs', 'drones', 'robots', 'missions', 'waves', 'hit-fx', 'weather', 'gun-light', 'enemy-glow', 'scope', 'aim-assist', 'vehicles', 'settings', 'intro'];
+
 
 
 
 const mods = [];          // { name, api, broken, missing }
 let ctx = null;
 let ready = false;
+
 
 
 
@@ -62,6 +67,7 @@ function call(m, fn, ...args) {
     return undefined;
   }
 }
+
 
 
 
@@ -88,11 +94,13 @@ export async function initExtras(context) {
 
 
 
+
 // Every frame, after the camera is placed
 export function updateExtras(dt) {
   if (!ready) return;
   for (const m of mods) call(m, 'update', dt);
 }
+
 
 
 
@@ -106,6 +114,7 @@ export function handleExtrasKey(code) {
 
 
 
+
 // Tell the extras something happened: extrasEvent('shot', {kind:'rifle'})
 export function extrasEvent(name, data) {
   if (!ready) return;
@@ -114,11 +123,13 @@ export function extrasEvent(name, data) {
 
 
 
+
 // Mission restarted
 export function resetExtras() {
   if (!ready) return;
   for (const m of mods) call(m, 'reset');
 }
+
 
 
 

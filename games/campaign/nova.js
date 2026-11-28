@@ -1,16 +1,25 @@
 /* =====================================================
-   NOVA for Strike Command (Campaign) - offline, rule-based
+   NOVA for Strike Command (Campaign) - offline, rule-based   v2
    Separate from games/assistant.js (War / Arena / Hub use that one).
    Press N to open / close (T is "Clear squad" in the Campaign).
    Reads the player's real key choices from keybinds.js.
+
+   v2: answers for the truck, scope, aim assist, weather, settings,
+       volume/music, drones, robots, training, tutorial, base guards,
+       capture, waves, results, intro, minimap, health, difficulty,
+       hit effects, recoil, phones and menu. Live status reads the HUD.
    ===================================================== */
+
 
 const BOT = 'NOVA';
 const OPEN_CODE = 'KeyN';
+const PHONE = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+
 
 /* ---------- live key names ---------- */
 let KB = null;
 import('./keybinds.js').then((m) => { KB = m; }).catch(() => { KB = null; });
+
 
 function K(id, fallback) {
   try {
@@ -21,6 +30,7 @@ function K(id, fallback) {
   } catch (e) { /* use fallback */ }
   return fallback;
 }
+
 
 /* ---------- styles ---------- */
 const CSS = `
@@ -59,11 +69,13 @@ const styleEl = document.createElement('style');
 styleEl.textContent = CSS;
 document.head.appendChild(styleEl);
 
+
 /* ---------- build panel ---------- */
 const badge = document.createElement('div');
 badge.id = 'nova-badge';
 badge.innerHTML = '<b>N</b>AI Assistant';
 document.body.appendChild(badge);
+
 
 const panel = document.createElement('div');
 panel.id = 'nova-panel';
@@ -79,18 +91,21 @@ panel.innerHTML = `
     <input id="nova-input" type="text" maxlength="200" placeholder="Ask me about Strike Command...">
     <button type="submit" id="nova-send">➤</button>
   </form>
-  <div id="nova-hint">Press N to open / close · Esc to close</div>
+  <div id="nova-hint">${PHONE ? 'Tap ✕ to close' : 'Press N to open / close · Esc to close'}</div>
 `;
 document.body.appendChild(panel);
+
 
 const msgsEl = document.getElementById('nova-msgs');
 const chipsEl = document.getElementById('nova-chips');
 const inputEl = document.getElementById('nova-input');
 const formEl = document.getElementById('nova-form');
 
+
 /* ---------- helpers ---------- */
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const txt = (id) => ((document.getElementById(id) || {}).textContent || '').trim();
+
 
 function isHidden(id) {
   const el = document.getElementById(id);
@@ -101,61 +116,118 @@ function isHidden(id) {
 }
 const inMission = () => isHidden('start-screen');
 
-const DEFAULT_CHIPS = ['The mission', 'Squad orders', 'Controls', 'Training soldiers', 'Change keys'];
+
+/* reads the visible lines of the game HUD (objective, enemies, squad...) */
+function liveLines() {
+  const out = [];
+  try {
+    const seen = new Set();
+    const add = (t) => {
+      t = (t || '').replace(/\s+/g, ' ').trim();
+      if (!t || t.length > 90 || seen.has(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+    add(txt('hud-info'));
+    const hud = document.getElementById('hud');
+    if (hud) {
+      hud.querySelectorAll('*').forEach((el) => {
+        if (el.children.length) return;
+        if (!el.getClientRects().length) return;
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/(enem|squad|army|capture|defend|clear|train|supply|health|drone|wave|objective|soldier)/i.test(t)) add(t);
+      });
+    }
+  } catch (e) { /* ignore */ }
+  return out.slice(0, 6);
+}
+
+
+const DEFAULT_CHIPS = ['The mission', 'Squad orders', 'Controls', 'Drive the truck', 'Settings'];
+
 
 /* ---------- answers that read the real keys ---------- */
-const controlsText = () =>
-  '🎮 CONTROLS (STRIKE COMMAND)\n' +
-  '• ' + K('forward', 'W') + ' ' + K('left', 'A') + ' ' + K('back', 'S') + ' ' + K('right', 'D') + ': move\n' +
-  '• ' + K('sprint', 'Shift') + ': sprint\n' +
-  '• ' + K('jump', 'Space') + ': jump\n' +
-  '• Mouse: look around\n' +
-  '• ' + K('fly', 'F') + ': fly mode (scout the island), ' + K('descend', 'C') + ': go down\n' +
-  '• ' + K('follow', '1') + ': squad follow me\n' +
-  '• ' + K('hold', '2') + ': squad hold position\n' +
-  '• ' + K('attack', '3') + ': squad go to the town square (test, will become Attack the town)\n' +
-  '• ' + K('interact', 'E') + ': use / train at the Barracks (coming soon)\n' +
-  '• ' + K('spawn', 'G') + ': spawn a soldier (test), ' + K('clear', 'T') + ': clear the squad (test)\n' +
-  '• ' + K('info', 'P') + ': info, ' + K('debug', 'B') + ': collision outlines (debug)\n' +
-  '• Esc: pause\n• N: talk to me\n\n' +
-  '⌨ Want different keys? Click the Controls button on the start screen.';
+const mobileText = () =>
+  '📱 TOUCH CONTROLS\n' +
+  '• Left stick: move (push it far to sprint)\n' +
+  '• Drag the right side of the screen: look around\n' +
+  '• FIRE, JUMP, RELOAD, SWAP (weapon) and SCOPE buttons\n' +
+  '• USE appears when you can do something (Barracks, truck)\n' +
+  '• Squad buttons appear once you have soldiers\n' +
+  '• Tap the small map to open the full map\n' +
+  '• In the truck: the stick drives, JUMP brakes, VIEW changes the camera, GET OUT leaves\n\n' +
+  'Landscape works best. The first tap takes the game fullscreen.';
+
+
+const controlsText = () => {
+  if (PHONE) return mobileText();
+  return '🎮 CONTROLS (STRIKE COMMAND)\n' +
+    '• ' + K('forward', 'W') + ' ' + K('left', 'A') + ' ' + K('back', 'S') + ' ' + K('right', 'D') + ': move\n' +
+    '• ' + K('sprint', 'Shift') + ': sprint     • ' + K('jump', 'Space') + ': jump\n' +
+    '• Mouse: look around, Left click: fire, R: reload, Mouse wheel: swap weapon\n' +
+    '• Right-click: big scope, ' + 'Z / X: scope zoom / fire zoom (Settings can change them)\n' +
+    '• ' + K('follow', '1') + ' Follow, ' + K('hold', '2') + ' Hold, ' + K('attack', '3') + ' Attack the town square\n' +
+    '• ' + K('interact', 'E') + ': use / train at the Barracks / drive the truck\n' +
+    '• V: truck view (while driving)\n' +
+    '• ' + K('map', 'M') + ': full map     • K: music on / off\n' +
+    '• ' + K('fly', 'F') + ': fly mode (scout), ' + K('descend', 'C') + ': go down\n' +
+    '• ' + K('spawn', 'G') + ' / ' + K('clear', 'T') + ': test keys (spawn / clear soldiers)\n' +
+    '• Esc: pause     • N: talk to me\n\n' +
+    '⌨ Want different keys? Open ⚙ Settings, then Controls.';
+};
+
 
 const squadText = () =>
-  '🪖 YOUR SQUAD\nYou start with 4 SWAT soldiers. Training at the Barracks will let you grow the army (up to 12).\n\n' +
-  'ORDERS:\n• ' + K('follow', '1') + ': Follow me (formation behind you)\n• ' + K('hold', '2') + ': Hold this position\n• ' +
-  K('attack', '3') + ': Go to the town square (test now, will become Attack the town)\n\n' +
-  'They plan routes around buildings, trees and fences, run when you are far away, and teleport back only if they get really lost.';
+  '🪖 YOUR SQUAD\nTrain soldiers at the Barracks (up to 12) and give them orders:\n\n' +
+  '• ' + K('follow', '1') + ': Follow me (formation behind you)\n• ' + K('hold', '2') + ': Hold this position\n• ' +
+  K('attack', '3') + ': Attack, go to the town square\n\n' +
+  'They plan routes around buildings, trees and fences, shoot enemies they see, run when you are far away, and teleport back only if they get really lost. You can also carry them in the army truck.';
 
-const trainingText = () =>
-  '🏕 TRAINING (BARRACKS)\nThis is the next feature being built. The plan:\n' +
-  '• Walk to a Barracks in your base and press ' + K('interact', 'E') + '\n' +
-  '• Spend supplies (they grow slowly over time)\n' +
-  '• A progress bar fills for about 5 seconds, then the new soldier walks out of the door\n' +
-  '• Choose a weapon type: pistol (fast, cheap), rifle (long range) or shotgun (hits hard up close)\n' +
-  '• The army is capped at 12 soldiers\n\n' +
-  'For testing now: ' + K('spawn', 'G') + ' spawns a soldier and ' + K('clear', 'T') + ' clears the squad.';
+
+const trainingText = () => {
+  if (PHONE) {
+    return '🏕 TRAINING (BARRACKS)\n• Walk to a Barracks in your base\n• Tap the training box that appears\n• A bar fills for a few seconds, then a new soldier walks out\n• Training makes pistol soldiers\n• Supplies grow slowly over time\n• The army is capped at 12';
+  }
+  return '🏕 TRAINING (BARRACKS)\n' +
+    '• Walk to a Barracks in your base (there are two) and press ' + K('interact', 'E') + '\n' +
+    '• Each soldier costs supplies, which start at 100 and grow slowly\n' +
+    '• A bar fills for about 4 seconds, then the new soldier walks out of the door\n' +
+    '• You can queue up to 3 at once\n' +
+    '• Training makes pistol soldiers (fast and cheap)\n' +
+    '• The army is capped at 12 soldiers\n\n' +
+    'Your first trained soldier also unlocks the base gates and the army truck.';
+};
+
 
 const keysText = () =>
-  '⌨ KEY CUSTOMIZATION\n1. On the start screen click the Controls button.\n2. Click the action you want to change.\n3. Press the new key.\n' +
+  '⌨ KEY CUSTOMIZATION\n1. On the start screen click ⚙ Settings.\n2. Click Controls.\n3. Click the action you want to change and press the new key.\n' +
   'If that key is already used, the two actions swap, so nothing is left without a key. Reset to defaults puts everything back.\n\n' +
-  'Your choices are saved in this browser. Esc always pauses and cannot be changed.';
+  'Your choices are saved in this browser. Esc always pauses and cannot be changed.' +
+  (PHONE ? '\n\nKey changing is for keyboards, so phones use touch buttons instead.' : '');
+
 
 const statusText = () => {
   if (!inMission()) return 'No mission is running. Click ENTER ISLAND and I will read your live status!';
-  return '📊 LIVE STATUS\n• ' + (txt('hud-info') || 'Strike Command') + '\n\n' +
-    'Orders: ' + K('follow', '1') + ' = Follow, ' + K('hold', '2') + ' = Hold.\n' +
-    'Missions and objectives are still being built, so for now you can explore, command your squad and test the world.';
+  const lines = liveLines();
+  return '📊 LIVE STATUS\n' + (lines.length ? lines.map((l) => '• ' + l).join('\n') : '• Strike Command') +
+    '\n\nOrders: ' + K('follow', '1') + ' = Follow, ' + K('hold', '2') + ' = Hold, ' + K('attack', '3') + ' = Attack.';
 };
+
 
 const TIPS = [
   () => 'Press ' + K('follow', '1') + ' to call your squad to you and ' + K('hold', '2') + ' to make them hold position.',
   'Your soldiers walk around buildings, trees and fences. They cannot walk through walls, and neither can you.',
   'The town is south-east of your base, near the harbor. Follow the road from the Main Gate.',
   () => 'Press ' + K('fly', 'F') + ' to toggle fly mode and scout the whole island from above.',
-  'The pier and Harbor Landing are where enemy reinforcements will arrive by boat.',
+  'Enemy reinforcements arrive by boat at the Harbor Landing during the defend phase, so keep some soldiers near the harbor side.',
   'If the FPS is low, lower the Quality on the start screen and keep fewer soldiers.',
-  'You can change every key with the Controls button on the start screen. Choices are saved.',
-  'Keep your squad together. Soldiers that fall far behind run to catch up.'
+  'You can change every key in ⚙ Settings, then Controls. Choices are saved.',
+  'Keep your squad together. Soldiers that fall far behind run to catch up.',
+  'Drive the army truck to carry up to 12 soldiers to the town quickly. Anyone you run over will not get up again.',
+  'Right-click for the big scope, then press Z to switch between 3x and 6x.',
+  'Aim assist is on Medium by default. Turn it up or off in ⚙ Settings.',
+  'Drones fly, so check the sky as well as the ground. Robots take more shots to bring down.',
+  'Enemies glow red, so you can spot them even in rain and storms.'
 ];
 let lastTip = -1;
 function tipText() {
@@ -166,6 +238,7 @@ function tipText() {
   return '💡 TIP\n' + (typeof t === 'function' ? t() : t);
 }
 
+
 const JOKES = [
   'Why did the drone fail the exam? It kept flying off topic. 😄',
   'Why do programmers love dark mode? Because light attracts bugs. 🐛',
@@ -173,115 +246,255 @@ const JOKES = [
   'There are 10 kinds of people: those who understand binary and those who do not.'
 ];
 
+
 /* =====================================================
    KNOWLEDGE BASE
+   (order matters: when two answers score the same, the first one wins)
    ===================================================== */
 const INTENTS = [
   { id: 'clear', keys: ['clear chat', 'reset chat', 'clear conversation', 'clear screen'], clear: true, reply: '' },
 
-  { id: 'status', keys: ['my status', 'status', 'how am i doing', 'my stats', 'my health', 'my score'],
+
+  { id: 'status', keys: ['my status', 'status', 'how am i doing', 'my stats', 'live status'],
     reply: statusText, chips: ['Give me a tip', 'The mission'] },
+
 
   { id: 'tips', keys: ['tip*', 'strateg*', 'advice', 'get better', 'improve', 'trick*'],
     reply: tipText, chips: ['Another tip', 'Squad orders', 'Controls'] },
 
-  { id: 'mission',
-    keys: ['mission', 'goal', 'objective', 'how to win', 'win', 'what do i do', 'strike command', 'campaign', 'rts', 'real time strategy', 'island', 'town', 'harbor', 'harbour', 'town hall', 'age of empires', 'base', 'hq'],
-    reply: '🏝 STRIKE COMMAND\nA realistic mini RTS played in first person, like Age of Empires seen through your own eyes.\n\n• You spawn at your base with 4 SWAT soldiers\n• The Space Gang has captured the town, which lies near the harbor\n• Train more soldiers at the Barracks\n• Clear the town and capture the Town Hall (stand in the square with no enemies left)\n• You lose if the Command HQ falls or you die\n\nWorld, collision, pathfinding and squad orders work now. Training, enemies, drones and missions are being added step by step.',
-    more: 'Everything is built from free CC0 assets: Kenney (pines, rocks, houses), Quaternius (characters) and Poly Haven (ground textures). Soldiers use A* pathfinding and a shared collision system, so nobody walks through walls or trees.',
-    chips: ['Squad orders', 'Training soldiers', 'The Space Gang', 'Controls'] },
 
-  { id: 'training', keys: ['train*', 'barracks', 'recruit*', 'supplies', 'reinforcement*', 'army', 'boat', 'boats'],
-    reply: trainingText, chips: ['Squad orders', 'The Space Gang', 'Change keys'] },
+  /* ----- vehicles ----- */
+  { id: 'truck', keys: ['truck*', 'vehicle*', 'driv*', 'car', 'jeep', 'steering', 'roadkill', 'run over', 'army truck', 'handbrake', 'transport'],
+    reply: () => PHONE
+      ? '🚚 THE ARMY TRUCK\n• It is parked near your spawn in the base, with a blue beacon above it\n• Walk up and tap the prompt to drive it\n• It unlocks after you train your first soldier\n• The left stick drives, JUMP brakes, VIEW switches between cab and outside camera, GET OUT leaves\n• It carries up to 12 soldiers, who are dropped behind it when you get out\n• Running enemies over kills them'
+      : '🚚 THE ARMY TRUCK\n• It is parked near your spawn in the base, with a blue beacon above it\n• Walk up and press ' + K('interact', 'E') + ' to get in (you must have trained your first soldier)\n• ' + K('forward', 'W') + ' ' + K('left', 'A') + ' ' + K('back', 'S') + ' ' + K('right', 'D') + ' drive, Space is the handbrake, Shift is boost\n• V switches between the driver seat (steering wheel and hands) and an outside camera\n• Soldiers within 70 m climb in automatically, up to 12, and are dropped behind the truck when you get out\n• Slow down below walking speed to get out\n• Running enemies over kills them\n• Walls, trees and deep water stop it',
+    more: 'The truck is built from code with no model file: six wheels, a canvas-covered bed, headlights and a star on the doors. Four collision circles along its length keep it from driving through walls.',
+    chips: ['Tell me more', 'Squad orders', 'Settings'] },
+
+
+  /* ----- scope / aim ----- */
+  { id: 'scope', keys: ['scope*', 'zoom*', 'sniper', 'right click', 'big scope', 'fire zoom', 'magnif*', 'optic*'],
+    reply: () => PHONE
+      ? '🔭 SCOPE\nTap the SCOPE button to look through the big scope. While you shoot, the view zooms in slightly and the gun leans toward the enemy.'
+      : '🔭 SCOPE\n• Fire zoom: when you shoot, the view zooms in slightly and the gun leans toward the enemy, then returns with no delay\n• Big scope: right-click to look through it (3x), press Z to switch to 6x and back off\n• X turns the fire zoom on or off\n• You can change these keys or turn them off in ⚙ Settings\n• Look sensitivity slows down while you zoom, for steady aim',
+    chips: ['Aim assist', 'Settings', 'Weapons'] },
+
+
+  { id: 'aimassist', keys: ['aim assist', 'auto aim', 'aim*', 'lock on', 'autoaim'],
+    reply: '🎯 AIM ASSIST\nA gentle help that pulls your crosshair toward an enemy when you aim close to one. It has four levels: Off, Low, Medium (default) and High.\n\nChange it in ⚙ Settings. It never fires for you, it only nudges your aim.',
+    chips: ['Scope', 'Recoil', 'Settings'] },
+
+
+  /* ----- world / effects ----- */
+  { id: 'weather', keys: ['weather', 'rain*', 'storm*', 'lightning', 'thunder', 'cloud*', 'sunny', 'fog', 'clear sky'],
+    reply: '🌦 WEATHER\nThree choices: Clear, Cloudy (default) and Storm.\n• Cloudy: grey sky and a gentle mood\n• Storm: heavy rain, lightning flashes and thunder\n• Clear: bright sun\n\nChange it in ⚙ Settings. Storm looks great but costs a little speed, so choose Clear or Cloudy on a slow device.',
+    chips: ['Settings', 'Is the game laggy?'] },
+
+
+  { id: 'fx', keys: ['blood*', 'hit effect*', 'effects', 'effect', 'glow*', 'outline', 'red outline', 'muzzle*', 'stagger*'],
+    reply: '✨ EFFECTS\n• Hits make glowing blood that splashes and fades\n• Enemies stagger when hit and you hear an impact sound\n• Every enemy has a red outline, so you can see them in rain or storm\n• Your gun has a bright muzzle flash and no tracer line, so full auto stays clean\n• The gun is lit by its own fill light, so it stays readable in the dark',
+    chips: ['Weather', 'Recoil', 'Weapons'] },
+
+
+  { id: 'recoil', keys: ['recoil', 'kick', 'gun kick', 'shake'],
+    reply: '🔫 RECOIL\nThe recoil is kept very low on purpose, so your aim stays steady even on full auto. The pistol, rifle and shotgun each kick a little differently, the shotgun most.\n\nYou can change the amount in ⚙ Settings under Gun recoil.',
+    chips: ['Aim assist', 'Settings', 'Weapons'] },
+
+
+  { id: 'audio', keys: ['volume*', 'sound*', 'audio', 'loud*', 'quiet', 'mute', 'master', 'sfx', 'music', 'song', 'soundtrack', 'k key'],
+    reply: '🔊 SOUND AND MUSIC\n• Master volume and Music volume sliders are in ⚙ Settings (saved on this device)\n• Music on / off switch is there too, or press K any time\n• Wind, sea, gunfire, rain and the truck engine are all made by code\n• The music is made by code and changes with the action\n\nThe menu uses the same saved volume.',
+    chips: ['Settings', 'Weather'] },
+
+
+  { id: 'keys', keys: ['rebind*', 'remap*', 'keybind*', 'key bindings', 'key settings', 'change keys', 'change key', 'change controls', 'custom controls', 'customize*', 'customise*'],
+    reply: keysText, chips: ['Controls', 'Settings'] },
+
+
+  { id: 'settings', keys: ['settings', 'setting', 'quality', 'graphics', 'options', 'resolution'],
+    reply: '⚙ SETTINGS\nClick ⚙ Settings on the start screen. It has:\n• Master volume and Music volume\n• Music on / off\n• Aim assist (Off, Low, Medium, High)\n• Gun recoil\n• Weather (Clear, Cloudy, Storm)\n• Scope keys and fire zoom\n• Truck view (first or third person)\n• Controls: choose your own keys\n• Reset, to put everything back\n\nQuality (Low, Medium, High) sits right next to it. Lower it if the game is slow. Everything is saved in this browser.',
+    chips: ['Change keys', 'Aim assist', 'Weather'] },
+
+
+  /* ----- mission flow ----- */
+  { id: 'training', keys: ['train*', 'barracks', 'recruit*', 'supplies', 'army', 'queue'],
+    reply: trainingText, chips: ['Squad orders', 'Drive the truck', 'The tutorial'] },
+
 
   { id: 'squad', keys: ['squad*', 'team', 'teammate*', 'orders', 'order*', 'follow', 'command*', 'soldier*', 'swat'],
     reply: squadText,
     more: 'Squad AI: every soldier follows a formation slot behind you, plans a route with A* pathfinding, avoids bumping into friends, and walks, runs or catches up depending on distance. Only one path search runs per frame for the whole squad, so the game stays smooth.',
-    chips: ['Tell me more', 'Training soldiers', 'Change keys'] },
+    chips: ['Tell me more', 'Training soldiers', 'Drive the truck'] },
 
-  { id: 'keys', keys: ['rebind*', 'remap*', 'keybind*', 'key bindings', 'key settings', 'change keys', 'change key', 'change controls', 'custom controls', 'customize*', 'customise*'],
-    reply: keysText, chips: ['Controls', 'Open settings?'] },
 
-  { id: 'controls', keys: ['controls', 'control', 'keys', 'keyboard', 'how to play', 'how do i play', 'move*', 'walk*', 'sprint*', 'run', 'how do i'],
-    reply: controlsText, chips: ['Change keys', 'Squad orders', 'Give me a tip'] },
+  { id: 'capture', keys: ['capture*', 'square', 'town square', 'town hall', 'hold the square'],
+    reply: '🏛 CAPTURING THE TOWN\nOnce the town is clear of enemies, stand in the town square (the open area in the middle of town). A bar fills while you hold it for about 12 seconds. If enemies come back in, push them out first.\n\nPress ' + K('attack', '3') + ' to send your squad there.',
+    chips: ['Sea waves', 'The mission', 'Squad orders'] },
 
-  { id: 'gang', keys: ['space gang', 'gang', 'terrorist*', 'enemy', 'enemies', 'drone*', 'drones', 'bot', 'bots'],
-    reply: '👾 THE SPACE GANG\nThe terrorists who captured the town. They wear spacesuits so you can tell them apart from your SWAT soldiers.\n\n• They hold the town, close to the harbor\n• Drones guard the town\n• More of them can arrive by sea at the Harbor Landing, roughly every 60 to 90 seconds\n\nEnemy soldiers, drones and boat reinforcements are being built now, so the island is still quiet for the moment.',
-    more: 'Enemies will use the same pathfinding and collision as your soldiers, so they walk around walls and trees instead of through them.',
-    chips: ['Tell me more', 'The mission', 'Squad orders'] },
 
-  { id: 'weapons', keys: ['weapon*', 'gun*', 'pistol', 'rifle', 'shotgun', 'ammo', 'grenade*'],
-    reply: '🔫 WEAPONS\nYour SWAT soldiers carry the pistol built into their model.\n\nWhen training arrives you will choose a weapon type for each new soldier:\n• Pistol: fast and cheap\n• Rifle: long range\n• Shotgun: hits hard up close\n\nCombat for the player and the enemies is the next big step.',
-    chips: ['Training soldiers', 'The Space Gang'] },
+  { id: 'waves', keys: ['wave*', 'defend', 'defence', 'defense', 'sea attack', 'reinforcement*', 'boat', 'boats', 'harbor landing'],
+    reply: '🌊 DEFENDING THE TOWN\nAfter you capture the square you must hold it for about 3 minutes. Three attack waves arrive from the sea, landing at the Harbor Landing about 12, 70 and 125 seconds into the defence. Waves include soldiers, and later ones bring robots.\n\nPlace your squad near the town square and use the buildings as cover.',
+    chips: ['Capture the town', 'Results and rank', 'Squad orders'] },
+
+
+  { id: 'result', keys: ['result*', 'victory', 'rank*', 'gold', 'silver', 'bronze', 'score', 'defeat', 'game over'],
+    reply: '🏆 RESULTS\nWhen the mission ends you see a victory or defeat screen with your time, kills and soldiers lost, plus a rank: GOLD, SILVER or BRONZE. A fast win with few soldiers lost gives the best rank.\n\nIf you fall, you can restart and try again.',
+    chips: ['Sea waves', 'Give me a tip'] },
+
+
+  { id: 'intro', keys: ['intro', 'flyover', 'fly over', 'cutscene', 'cinematic', 'opening'],
+    reply: '🎬 INTRO\nWhen you start, a short flyover (about 13 seconds) shows the base, the town and the harbor, then you start at your base. It plays once each time the page loads.',
+    chips: ['The mission', 'The tutorial'] },
+
+
+  { id: 'tutorial', keys: ['tutorial', 'guide', 'where do i start', 'how to start', 'first step', 'lock*', 'cant leave', 'cannot leave', 'gates closed', 'beginner*'],
+    reply: () => '🧭 THE TUTORIAL\nAt the start a guide leads you along a path to the Barracks. Train your first soldier there (' + (PHONE ? 'tap the training box' : 'press ' + K('interact', 'E')) + '). Until then the base gates stay locked, so you learn the key feature first. After that the whole island opens up, and the army truck unlocks too.',
+    chips: ['Training soldiers', 'Drive the truck'] },
+
+
+  { id: 'guards', keys: ['guard*', 'base guards', 'sentries', 'sentry', 'gate*'],
+    reply: '💂 BASE GUARDS\nYour base has real SWAT guards at the posts and outside both gates. They attack anything hostile they see and then return to their posts. They are not part of your army and do not count toward the cap of 12.',
+    chips: ['Squad orders', 'The Space Gang'] },
+
+
+  { id: 'drones', keys: ['drone*'],
+    reply: '🚁 DRONES\nSpace Gang drones fly around the town, hunt for targets and shoot. Four of them guard the town at the start. They are airborne, so look up, and they move fast. Rifles are best at long range, the pistol is fine when they come close.',
+    chips: ['Robots', 'The Space Gang', 'Weapons'] },
+
+
+  { id: 'robots', keys: ['robot*', 'mech', 'mechs', 'turret*'],
+    reply: '🤖 ROBOTS\nThe Space Gang also uses two walking mechs and four fixed turrets. They take far more shots than a soldier, so focus fire with your squad and use cover. Turrets cannot move, so you can go around them.',
+    chips: ['Drones', 'The Space Gang', 'Weapons'] },
+
+
+  { id: 'gang', keys: ['space gang', 'gang', 'terrorist*', 'enemy', 'enemies', 'humans', 'bad guys'],
+    reply: '👾 THE SPACE GANG\nThe terrorists who captured the town. They wear spacesuits, so you can tell them apart from your SWAT soldiers, and each has a red outline.\n\n• Enemy soldiers hold the town and see you from about 50 m\n• 4 drones and 2 robot mechs with 4 turrets guard it too\n• More arrive by sea at the Harbor Landing in three waves after you capture the square\n\nThey use the same pathfinding and collision as your soldiers, so they walk around walls and trees.',
+    more: 'Enemy AI is a state machine: idle, chase, attack and retreat, driven by what they can see and hear. Drones and robots have their own behaviour on top of that.',
+    chips: ['Tell me more', 'Drones', 'Robots', 'Difficulty'] },
+
+
+  { id: 'difficulty', keys: ['difficulty', 'easy', 'hard', 'harder', 'easier', 'too hard', 'too easy', 'normal'],
+    reply: '⚖ DIFFICULTY\nStrike Command runs on Normal difficulty: enemies see you from about 50 m, shoot back with moderate damage, and take a fair number of shots. Your own soldiers are balanced so they help but cannot win the mission for you.',
+    chips: ['Weapons', 'Give me a tip'] },
+
+
+  { id: 'mission',
+    keys: ['mission', 'goal', 'objective', 'how to win', 'win', 'what do i do', 'strike command', 'campaign', 'rts', 'real time strategy', 'island', 'town', 'harbor', 'harbour', 'age of empires', 'base', 'hq'],
+    reply: '🏝 STRIKE COMMAND\nA realistic mini RTS played in first person, like Age of Empires seen through your own eyes.\n\n1. Intro flyover\n2. TRAIN: train your first soldier at the Barracks\n3. CLEAR: take your squad into Port Town and defeat the Space Gang\n4. CAPTURE: hold the town square for about 12 seconds\n5. DEFEND: survive 3 attack waves from the sea\n6. RESULT: time, kills, soldiers lost and a rank\n\nAlong the way you can drive the army truck, use the scope and command up to 12 soldiers.',
+    more: 'Everything is built from free CC0 assets: Kenney (pines, rocks, houses), Quaternius (characters) and Poly Haven (ground textures). Soldiers use A* pathfinding and a shared collision system, so nobody walks through walls or trees.',
+    chips: ['Tell me more', 'Training soldiers', 'The Space Gang', 'Controls'] },
+
+
+  /* ----- combat ----- */
+  { id: 'weapons', keys: ['weapon*', 'gun*', 'pistol', 'rifle', 'shotgun', 'ammo', 'reload*', 'shoot*', 'fire', 'firing', 'headshot*', 'grenade*', 'swap', 'magazine'],
+    reply: () => '🔫 WEAPONS\nYou carry three guns:\n• Pistol: accurate, 12 rounds\n• Rifle: automatic, long range, 40 rounds (you start with it)\n• Shotgun: 8 pellets, hits hard up close, 6 shells\n\n' +
+      (PHONE ? 'Tap FIRE to shoot, RELOAD to reload and SWAP to change weapon.' : 'Left click to fire, R to reload and the mouse wheel to swap.') +
+      ' Headshots do double damage.\n\nYour trained soldiers use the pistol built into their model.',
+    chips: ['Scope', 'Recoil', 'Aim assist'] },
+
+
+  { id: 'health', keys: ['health', 'hp', 'heal*', 'die', 'died', 'dead', 'death', 'respawn', 'restart', 'hurt'],
+    reply: '❤ HEALTH\nYour health bar is on the HUD. The screen flashes when you are hit. If it reaches zero you are down and can restart the mission from the screen that appears.\n\nUse walls and buildings as cover, and let your squad take the front.',
+    chips: ['Give me a tip', 'Results and rank'] },
+
+
+  { id: 'minimap', keys: ['minimap', 'mini map', 'map', 'radar', 'full map'],
+    reply: () => '🗺 MAP\nThe small map on the screen shows you, your soldiers and the enemies nearby. ' +
+      (PHONE ? 'Tap it to open the full map.' : 'Press ' + K('map', 'M') + ' to open the full map of the island.'),
+    chips: ['Controls', 'The mission'] },
+
 
   { id: 'cover', keys: ['cover', 'wall*', 'hide', 'sandbag*', 'solid', 'collision', 'trees', 'tree'],
-    reply: '🧱 SOLID WORLD\nBuildings, fences, sandbags, barriers, the pier, trees and rocks are all solid. You and your soldiers cannot walk through them, so use them as cover and choke points when the fighting starts.',
+    reply: '🧱 SOLID WORLD\nBuildings, fences, sandbags, barriers, the pier, trees and rocks are all solid. You, your soldiers, the enemies and even the truck cannot pass through them, so use them as cover and choke points.',
     chips: ['Squad orders', 'Give me a tip'] },
 
-  { id: 'settings', keys: ['settings', 'setting', 'quality', 'graphics', 'options', 'resolution'],
-    reply: '⚙ SETTINGS\nOn the start screen:\n• Quality: Low, Medium or High. Lower it if the game is slow.\n• Controls: choose your own keys\nYour choices are saved in this browser.',
-    chips: ['Change keys', 'Is the game laggy?'] },
+
+  { id: 'controls', keys: ['controls', 'control', 'keys', 'keyboard', 'how to play', 'how do i play', 'move*', 'walk*', 'sprint*', 'run'],
+    reply: controlsText, chips: ['Change keys', 'Squad orders', 'Give me a tip'] },
+
 
   { id: 'performance', keys: ['lag', 'laggy', 'is the game laggy', 'slow', 'fps', 'stutter*', 'performance', 'freeze', 'freezing', 'bug', 'glitch', 'broken', 'not working', 'stuck'],
-    reply: '🔧 TROUBLESHOOTING\n• Lower the Quality on the start screen (Medium or Low)\n• Keep fewer soldiers: every character is a detailed 3D model\n• Close browser DevTools: they cut the FPS a lot, especially in phone view\n• On a laptop, plug in the charger and use high-performance power mode\n• Use Chrome or Edge and refresh with Ctrl + Shift + R\n• If the mouse is stuck, press Esc, then press Resume',
-    chips: ['Open settings?', 'Controls'] },
+    reply: '🔧 TROUBLESHOOTING\n• Lower the Quality on the start screen (Medium or Low)\n• Choose Clear or Cloudy weather instead of Storm\n• Keep fewer soldiers: every character is a detailed 3D model\n• Close browser DevTools: they cut the FPS a lot, especially in phone view\n• On a laptop, plug in the charger and use high-performance power mode\n• Use Chrome or Edge and refresh with Ctrl + Shift + R\n• If the mouse is stuck, press Esc, then press Resume\n• Close any second copy of the game: two tabs double the rain sound and halve the speed',
+    chips: ['Settings', 'Weather'] },
 
-  { id: 'pause', keys: ['pause', 'paused', 'quit', 'exit', 'menu', 'resume'],
+
+  { id: 'pause', keys: ['pause', 'paused', 'resume', 'esc', 'escape'],
     reply: '⏸ PAUSE\nPress Esc to pause. From the pause screen click RESUME to go back in. Esc always pauses and cannot be rebound.',
     chips: ['Controls', 'Give me a tip'] },
 
-  { id: 'mobile', keys: ['mobile', 'phone', 'phones', 'android', 'iphone', 'tablet', 'touch'],
-    reply: '📱 PHONES\nStrike Command is designed for a keyboard and mouse on PC. Arena Mode and War Mode both work on phones with touch controls.',
+
+  { id: 'menu', keys: ['menu', 'main menu', 'back to menu', 'home', 'quit', 'exit', 'leave', 'website'],
+    reply: '🏠 LEAVING THE MISSION\nPress Esc to pause. The screen that appears has Back to Menu (the game menu with Campaign, War and Arena) and Home (the website). Your settings stay saved either way.',
+    chips: ['Controls', 'What is NOVA STRIKE 3D?'] },
+
+
+  { id: 'mobile', keys: ['mobile', 'phone', 'phones', 'android', 'iphone', 'tablet', 'touch*', 'joystick', 'fullscreen', 'full screen', 'landscape', 'rotate'],
+    reply: () => mobileText() + '\n\nOn iPhone, use Share → Add to Home Screen for a true fullscreen app. Arena and War work on phones as well.',
     chips: ['Controls', 'The mission'] },
 
+
+  /* ----- the project ----- */
   { id: 'game', keys: ['nova strike', 'nova strike 3d', 'what is nova strike 3d', 'what is nova strike', 'the game', 'this game', 'game modes', 'modes', 'arena', 'war'],
-    reply: '🎮 NOVA STRIKE 3D\nTactical AI Combat: a 3D game that runs in your browser. It has:\n• Arena Mode: survive waves of AI drones\n• War Mode: a campaign with a Solo, Duo or Squad team\n• Campaign (Strike Command): this first-person mini RTS, in development\n• Multiplayer: real online players (in development)',
+    reply: '🎮 NOVA STRIKE 3D\nA 3D game that runs in your browser, with no download. It has:\n• Arena Mode: survive waves of AI enemies\n• War Mode: missions with a Solo, Duo or Squad team\n• Campaign (Strike Command): this first-person mini RTS\n• Multiplayer: real online players (coming later)\n\nIt works on PC and on phones.',
     chips: ['The mission', 'Who made this?'] },
 
+
   { id: 'tech', keys: ['how was this made', 'technology', 'tech', 'built with', 'made with', 'three', 'threejs', 'javascript', 'code', 'coding', 'engine', 'models'],
-    reply: '🛠 HOW IT IS BUILT\n• Plain HTML, CSS and JavaScript, with no framework\n• Three.js for the 3D graphics\n• Free CC0 3D models and textures, loaded as glTF\n• A* pathfinding and a shared collision system for soldiers and enemies\n• Pointer Lock for mouse look, localStorage for your settings and key choices\n\nEverything used is free.',
+    reply: '🛠 HOW IT IS BUILT\n• Plain HTML, CSS and JavaScript, with no framework\n• Three.js for the 3D graphics\n• Free CC0 3D models and textures, loaded as glTF\n• A* pathfinding and a shared collision system for soldiers, enemies and the truck\n• Web Audio: the music and most sounds are generated by code\n• Pointer Lock for mouse look, localStorage for your settings and key choices\n\nEverything used is free.',
     chips: ['How does the AI work?', 'Does it work offline?'] },
 
+
   { id: 'ai', keys: ['ai', 'artificial intelligence', 'intelligen*', 'smart', 'brain', 'think*', 'how does the ai work', 'how does ai work'],
-    reply: '🧠 THE AI\n• Your soldiers: follow a formation, find their own route with A* pathfinding and obey your orders.\n• Enemies (coming): the same movement system, plus sensing and deciding when to attack.\n• Me: a rule-based assistant that matches your words against a knowledge base, so I work fully offline.',
+    reply: '🧠 THE AI\n• Your soldiers: follow a formation, find their own route with A* pathfinding, obey your orders and fight what they see.\n• Enemies: a state machine that senses, chases, attacks and retreats. Drones and robots have their own behaviour.\n• The wave director sends sea attacks during the defend phase.\n• Me: a rule-based assistant that matches your words against a knowledge base, so I work fully offline.',
     chips: ['Squad orders', 'The Space Gang'] },
+
 
   { id: 'offline', keys: ['offline', 'internet', 'wifi', 'wi fi', 'connection', 'without internet'],
     reply: '📡 OFFLINE\nI work with no internet at all. The game loads the Three.js library from a free CDN, so the first load needs internet.',
     chips: ['How was this made?'] },
 
+
   { id: 'nova', keys: ['nova', 'how does nova work', 'who is nova', 'assistant', 'chatbot', 'chat bot', 'n key'],
-    reply: '🤖 ABOUT NOVA\nI am NOVA, the AI assistant of NOVA STRIKE 3D. In Strike Command press N to talk to me.\nI am rule-based: I match your words against a knowledge base (and forgive small typos), so I work offline and answer instantly. No server and no paid API are used, so I am free and private.',
+    reply: '🤖 ABOUT NOVA\nI am NOVA, the AI assistant of NOVA STRIKE 3D. In Strike Command ' + (PHONE ? 'tap the N badge' : 'press N') + ' to talk to me.\nI am rule-based: I match your words against a knowledge base (and forgive small typos), so I work offline and answer instantly. No server and no paid API are used, so I am free and private.',
     chips: ['What is NOVA STRIKE 3D?', 'Does it work offline?'] },
+
 
   { id: 'creator', keys: ['who made', 'who created', 'who built', 'who developed', 'who designed', 'developer', 'creator', 'author', 'daniyal', 'made by', 'built by'],
     reply: '👨‍💻 CREATOR\nGame Hub and NOVA STRIKE 3D were designed and developed by Daniyal for the AI/IT Expo 2026 at Forte Colleges of Excellence, Sargodha. AI tools (Claude) were used to help write the code, and everything was tested and tuned by him.',
     chips: ['How was this made?', 'What is this project?'] },
 
+
   { id: 'expo', keys: ['expo', 'college', 'forte', 'sargodha', 'competition', 'project', 'what is this project', 'what is this'],
     reply: '🎓 THE PROJECT\nGame Hub is an entry for the AI/IT Expo 2026 at Forte Colleges of Excellence, Sargodha. Its flagship, NOVA STRIKE 3D, shows a 3D game with AI-controlled enemies and teammates, phone support and an in-game AI assistant (me!), all built with free, open web technology.',
     chips: ['Who made this?', 'How does the AI work?'] },
 
+
   { id: 'whoareyou', keys: ['who are you', 'your name', 'what are you', 'are you ai', 'introduce yourself', 'what can you do', 'help', 'help me'],
-    reply: 'I am NOVA, the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the mission, squad orders, training, the Space Gang, controls or how to change your keys. In the mission I can also read your live status.',
+    reply: 'I am NOVA, the AI assistant of NOVA STRIKE 3D. 🤖\nAsk me about the mission, squad orders, the army truck, the scope, training, the Space Gang, settings, controls or how to change your keys. In the mission I can also read your live status.',
     chips: DEFAULT_CHIPS },
 
+
   { id: 'joke', keys: ['joke', 'funny', 'make me laugh', 'laugh'], reply: () => pick(JOKES), chips: ['Another joke', 'Give me a tip'] },
+
 
   { id: 'thanks', keys: ['thanks', 'thank', 'thank you', 'thx', 'shukriya', 'great', 'awesome', 'cool', 'nice'],
     reply: () => pick(['You are welcome, Commander! 🎯', 'Anytime! Now go lead your squad. 💪', 'Happy to help!']), chips: ['Give me a tip'] },
 
+
   { id: 'bye', keys: ['bye', 'goodbye', 'see you', 'later', 'cya'], reply: 'Goodbye, Commander! Come back anytime. 👋' },
+
 
   { id: 'howareyou', keys: ['how are you', 'how r u', 'whats up', 'sup'],
     reply: () => pick(['All systems online! Ready to help you command.', 'Running smoothly and ready for orders!']), chips: ['Give me a tip', 'Controls'] },
 
+
   { id: 'more', keys: ['tell me more', 'more', 'more details', 'elaborate', 'go on', 'continue'], reply: '' },
+
 
   { id: 'greet', keys: ['hi', 'hello', 'hey', 'hii', 'hiya', 'yo', 'salam', 'assalam*', 'aoa', 'good morning', 'good evening', 'good afternoon', 'greetings'],
     reply: () => pick(['Hello, Commander! 👋 How can I help?', 'Hey there! Ready for action?', 'Hi! Ask me anything about Strike Command.']),
     chips: DEFAULT_CHIPS }
 ];
+
 
 /* =====================================================
    MATCHING ENGINE
@@ -289,6 +502,7 @@ const INTENTS = [
 function normalize(s) {
   return s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
+
 
 function lev(a, b) {
   const m = a.length, n = b.length, d = [];
@@ -303,6 +517,7 @@ function lev(a, b) {
   return d[m][n];
 }
 
+
 function keyMatches(key, tokens, padded) {
   if (key.endsWith('*')) {
     const p = key.slice(0, -1);
@@ -315,6 +530,7 @@ function keyMatches(key, tokens, padded) {
   }
   return false;
 }
+
 
 function findIntent(text) {
   const norm = normalize(text);
@@ -333,8 +549,10 @@ function findIntent(text) {
   return best;
 }
 
+
 let lastIntent = null;
 const resolve = (v) => (typeof v === 'function' ? v() : v);
+
 
 function getReply(text) {
   const intent = findIntent(text);
@@ -342,7 +560,7 @@ function getReply(text) {
     lastIntent = null;
     return {
       text: pick(['Hmm, I am not sure about that one. 🤔', 'I did not quite get that. 🤔']) +
-        '\nI know about the mission, squad orders, training, the Space Gang, controls, settings and how the game was built. Try one of these:',
+        '\nI know about the mission, squad orders, the army truck, the scope, training, the Space Gang, settings, controls and how the game was built. Try one of these:',
       chips: DEFAULT_CHIPS.slice(0, 4)
     };
   }
@@ -358,11 +576,13 @@ function getReply(text) {
   return { text: resolve(intent.reply), chips: resolve(intent.chips), clear: intent.clear };
 }
 
+
 /* =====================================================
    CHAT UI
    ===================================================== */
 let replyToken = 0;
 const scrollDown = () => { msgsEl.scrollTop = msgsEl.scrollHeight; };
+
 
 function addMsg(who, text) {
   const el = document.createElement('div');
@@ -373,6 +593,7 @@ function addMsg(who, text) {
   return el;
 }
 
+
 function addTyping() {
   const el = document.createElement('div');
   el.className = 'nova-msg bot nova-typing';
@@ -381,6 +602,7 @@ function addTyping() {
   scrollDown();
   return el;
 }
+
 
 function showChips(list) {
   chipsEl.innerHTML = '';
@@ -393,11 +615,13 @@ function showChips(list) {
   });
 }
 
+
 function botSay(text, chips, token) {
   const el = addMsg('bot', '');
+  const stepSize = text.length > 500 ? 6 : 3;
   let i = 0;
   const step = () => {
-    i += 2;
+    i += stepSize;
     el.textContent = text.slice(0, i);
     scrollDown();
     if (i < text.length) setTimeout(step, 12);
@@ -406,9 +630,12 @@ function botSay(text, chips, token) {
   step();
 }
 
-const WELCOME = 'Hi Commander, I am ' + BOT + ', the AI assistant of NOVA STRIKE 3D. 🤖\nYou are in Strike Command. Ask me about the mission, your squad orders, training, the Space Gang or how to change your keys.';
+
+const WELCOME = 'Hi Commander, I am ' + BOT + ', the AI assistant of NOVA STRIKE 3D. 🤖\nYou are in Strike Command. Ask me about the mission, your squad, the army truck, the scope, training, the Space Gang, settings or how to change your keys.';
+
 
 function welcome() { botSay(WELCOME, DEFAULT_CHIPS, replyToken); }
+
 
 function send(raw) {
   const text = raw.trim().slice(0, 200);
@@ -418,13 +645,14 @@ function send(raw) {
   const token = ++replyToken;
   const typing = addTyping();
   const result = getReply(text);
-  const delay = Math.min(1100, 450 + (result.text || '').length * 2);
+  const delay = Math.min(900, 400 + (result.text || '').length * 1.5);
   setTimeout(() => {
     typing.remove();
     if (result.clear) { msgsEl.innerHTML = ''; welcome(); return; }
     botSay(result.text, result.chips, token);
   }, delay);
 }
+
 
 formEl.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -433,11 +661,13 @@ formEl.addEventListener('submit', (e) => {
   send(v);
 });
 
+
 /* =====================================================
    OPEN / CLOSE  (N key)
    ===================================================== */
 let isOpen = false;
 let welcomed = false;
+
 
 function openChat() {
   if (isOpen) return;
@@ -449,6 +679,7 @@ function openChat() {
   setTimeout(() => inputEl.focus(), 60);
 }
 
+
 function closeChat() {
   if (!isOpen) return;
   isOpen = false;
@@ -457,8 +688,10 @@ function closeChat() {
   inputEl.blur();
 }
 
+
 badge.addEventListener('click', openChat);
 document.getElementById('nova-close').addEventListener('click', closeChat);
+
 
 // typing in the chat box must not trigger game keys
 inputEl.addEventListener('keydown', (e) => {
@@ -466,6 +699,7 @@ inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeChat();
 });
 inputEl.addEventListener('keyup', (e) => e.stopPropagation());
+
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && isOpen) { closeChat(); return; }
@@ -476,8 +710,10 @@ document.addEventListener('keydown', (e) => {
   if (isOpen) closeChat(); else openChat();
 });
 
+
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement && isOpen) closeChat();
 });
 
-console.log('[nova] Strike Command assistant ready (press N)');
+
+console.log('[nova] v2 ready (press N): truck, scope, aim assist, weather, settings, training, waves, drones, robots, phones');

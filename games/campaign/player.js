@@ -1,5 +1,5 @@
 // ============================================================
-//  NOVA STRIKE 3D — Campaign: games/campaign/player.js  (v10)
+//  NOVA STRIKE 3D — Campaign: games/campaign/player.js  (v11)
 //  The player's own first-person weapon.
 //     Left mouse = fire     Wheel / Q = switch     R = reload
 //  Hitscan: a ray from the camera. Walls and the ground stop it,
@@ -19,12 +19,15 @@
 //      kick and the gun's visual kick. 0 = none, 1 = the old v9 feel.
 //      Saved on this device (campaign_recoil) so the settings screen
 //      can use it later.   Console: tuneRecoil(0..1)
+//  v11: no shooting, reloading or weapon swapping while you drive the
+//      truck (vehicles.js). This also stops the phone FIRE button.
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { blockedAt, groundHeight } from './collision.js';
 import { getEnemies, hurtEnemy } from './enemies.js';
 import { extrasEvent } from './extras.js';
+
 
 
 // ---------- knobs ----------
@@ -56,6 +59,7 @@ const RECOIL_KEY = 'campaign_recoil';
 let RECOIL = 0.10;            // recoil strength: 0 = none, 1 = old feel (v9 = 1)
 
 
+
 // muzzle flash
 const MUZZLE_SLICE = 0.03;    // front 3 cm of the gun model = the muzzle
 const FLASH_TIME = 0.06;      // seconds one flash lasts
@@ -64,10 +68,12 @@ const CORE_RATIO = 0.5;       // white core size compared to the glow
 let FLASH_BRIGHT = 1.8;       // colour strength of the flash (1 = old look, 2.5 = very hot)
 let LIGHT_POWER = 6;          // strength of the warm light pulse (PC only, 0 = off)
 
+
 try {
   const saved = parseFloat(localStorage.getItem(RECOIL_KEY));
   if (isFinite(saved)) RECOIL = Math.max(0, Math.min(1.5, saved));
 } catch (e) { /* storage blocked: keep the default */ }
+
 
 
 // ---------- state ----------
@@ -86,9 +92,11 @@ const stats = { shots: 0, hits: 0, kills: 0, heads: 0 };
 let hud, hudLast = '', hitEl, feedEl, warned = false;
 
 
+
 const O = new THREE.Vector3(), D = new THREE.Vector3(), T1 = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const P = { x: 0, z: 0 };
+
 
 
 for (const k of ORDER) {
@@ -98,8 +106,18 @@ for (const k of ORDER) {
 }
 
 
+
 // ---------- helpers ----------
 const W = () => WEAPONS[ORDER[cur]];
+
+
+
+// true while the player is driving the army truck (vehicles.js)
+function driving() {
+  const t = window.campaignTruck;
+  return !!(t && typeof t.isDriving === 'function' && t.isDriving());
+}
+
 
 
 function posOf(e) {
@@ -115,10 +133,12 @@ function isDead(e) {
 }
 
 
+
 // ---------- sound events (sound.js plays them) ----------
 function ev(name, data) {
   try { extrasEvent(name, data || {}); } catch (e) { /* sound is optional */ }
 }
+
 
 
 // ---------- HUD (made in code, no HTML edit needed) ----------
@@ -149,6 +169,7 @@ function drawHud() {
 }
 
 
+
 // ---------- loading the gun models ----------
 // Same fitting as War's fitModel + makeGun: long side = size, centred left/right and up/down,
 // back of the gun at z = 0.2, muzzle toward -z.
@@ -175,6 +196,7 @@ function placeholder(size) {
   g.add(m);
   return g;
 }
+
 
 
 // finds the front tip of a gun (average of the vertices in the front few cm).
@@ -205,6 +227,7 @@ function findTip(wrap) {
 }
 
 
+
 // the muzzle of a gun in GUN-ROOT space (with the gun's own pose and tuneGun applied)
 function muzzleLocal(kind, out) {
   const m = models[kind], t = tips[kind];
@@ -215,6 +238,7 @@ function muzzleLocal(kind, out) {
   out.x += o[0]; out.y += o[1]; out.z += o[2];
   return out;
 }
+
 
 
 function applyView(kind) {
@@ -261,6 +285,7 @@ async function loadGun(kind, loader) {
   showCur();
   if (ORDER.every(k => models[k])) ready = true;
 }
+
 
 
 // ---------- muzzle flash pictures (drawn in code) ----------
@@ -313,6 +338,7 @@ function paintFlashColor() {
 }
 
 
+
 // ---------- tuning from the Console ----------
 // tuneGun("rifle", x, y, z, yawDegrees, thickness, length)  (numbers are offsets from War's root)
 window.tuneGun = function (kind, x, y, z, yawDeg = 0, thick = 1, len = 1) {
@@ -326,6 +352,7 @@ window.tuneGun = function (kind, x, y, z, yawDeg = 0, thick = 1, len = 1) {
               yawDeg + ', ' + thick + ', ' + len + ')');
 };
 
+
 // tuneFlash(bright, light): flash colour strength (1.8 now) and light pulse (6 now, 0 = off).
 window.tuneFlash = function (bright, light) {
   if (typeof bright === 'number') { FLASH_BRIGHT = Math.max(0.3, bright); paintFlashColor(); }
@@ -333,6 +360,7 @@ window.tuneFlash = function (bright, light) {
   console.log('[player] flash brightness ' + FLASH_BRIGHT + ', light pulse ' + LIGHT_POWER +
               (flashLight ? '' : ' (no light on phones)'));
 };
+
 
 // tuneRecoil(amount): 0 = no recoil at all, 0.1 = tiny (default), 1 = the old v9 feel.
 // The number is saved on this device. No argument = show the current value.
@@ -344,10 +372,12 @@ window.tuneRecoil = function (amount) {
   console.log('[player] recoil strength ' + RECOIL + '  (0 = none, 1 = old feel)');
 };
 
+
 // old name kept so nothing breaks: the player no longer draws any line
 window.tuneTracer = function () {
-  console.log('[player] v10 has no player tracer line. Use tuneFlash(bright, light) for the flash.');
+  console.log('[player] v11 has no player tracer line. Use tuneFlash(bright, light) for the flash.');
 };
+
 
 // tuneMuzzle("rifle", dx, dy, dz) nudges where the flash starts (metres, gun-root space).
 //     dx + = right, dy + = up, dz - = further forward.  tuneMuzzle("rifle",0,0,0) resets.
@@ -359,16 +389,19 @@ window.tuneMuzzle = function (kind, dx, dy, dz) {
 };
 
 
+
 // ---------- init ----------
 export function initPlayerGun(camera, scene) {
   cam = camera;
   if (!cam.parent) scene.add(cam);
   if (cam.near > 0.1) { cam.near = 0.1; cam.updateProjectionMatrix(); }
 
+
   holder = new THREE.Group();                     // = War's gunRoot
   holder.position.set(ROOT[0], ROOT[1], ROOT[2]);
   holder.visible = false;
   cam.add(holder);
+
 
   // muzzle flash: orange glow + white-hot core
   flash = makeFlashSprite('glow');
@@ -379,6 +412,7 @@ export function initPlayerGun(camera, scene) {
   holder.add(flashCore);
   paintFlashColor();
 
+
   // quick warm light pulse on each shot (PC only, to save fps on phones)
   const IS_PHONE = (typeof matchMedia === 'function' &&
                     matchMedia('(hover: none) and (pointer: coarse)').matches);
@@ -388,36 +422,44 @@ export function initPlayerGun(camera, scene) {
   }
   showCur();
 
+
   makeHud();
+
 
   for (const k of ORDER) ammo[k] = WEAPONS[k].mag;
   const loader = new GLTFLoader();
   for (const k of ORDER) loadGun(k, loader);
 
+
   // mouse
   document.addEventListener('mousedown', e => {
     if (e.button !== 0 || !document.pointerLockElement) return;
+    if (driving()) return;
     holding = true; clickBuf = 0.18;
   });
   document.addEventListener('mouseup', e => { if (e.button === 0) holding = false; });
   window.addEventListener('blur', () => { holding = false; });
   document.addEventListener('wheel', e => {
     if (!document.pointerLockElement || !isActive) return;
+    if (driving()) return;
     if (wheelT > 0) return;
     wheelT = 0.2;
     switchTo((cur + (e.deltaY > 0 ? 1 : ORDER.length - 1)) % ORDER.length);
   }, { passive: true });
 
-  console.log('[player] v10 ready: recoil ' + RECOIL + ', bright muzzle flash, no lines' +
+
+  console.log('[player] v11 ready: recoil ' + RECOIL + ', bright muzzle flash, no lines' +
               (flashLight ? ', light pulse on' : ', light pulse off (phone)'));
 }
 
 
+
 // ---------- phone hook (touch.js calls this from the FIRE button) ----------
 export function setFireHeld(on) {
-  if (on) { holding = true; clickBuf = 0.18; }
+  if (on && !driving()) { holding = true; clickBuf = 0.18; }
   else holding = false;
 }
+
 
 
 // ---------- actions ----------
@@ -433,6 +475,7 @@ function startReload() {
   reloading = true; reloadT = w.reloadTime;
   ev('reload', { kind: k, time: w.reloadTime });
 }
+
 
 
 // cast one invisible ray: returns {t, enemy, head}
@@ -472,11 +515,13 @@ function castRay(dx, dy, dz, range, enemies) {
 }
 
 
+
 function fire(player, dt) {
   const w = W(), k = ORDER[cur];
   ammo[k]--; stats.shots++;
   fireT = Math.max(fireT, -dt) + w.rate;             // keep the leftover time, so the true fire rate is kept
   kick = Math.min(1.2, kick + w.kick * RECOIL);      // gun's visual kick (scaled by RECOIL)
+
 
   // muzzle flash: new size and rotation every shot
   flashT = FLASH_TIME;
@@ -488,26 +533,32 @@ function fire(player, dt) {
   flashCore.material.rotation = Math.random() * 6.28;
   ev('shot', { kind: k });
 
+
   // camera kick (scaled by RECOIL), remembered so it can settle back later
   const nudge = w.camKick * RECOIL * (0.7 + Math.random() * 0.6);
   player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch + nudge));
   recoil += nudge;
 
+
   cam.getWorldPosition(O);
   cam.getWorldDirection(D);
+
 
   const speed = Math.hypot(player.vx || 0, player.vz || 0);
   const spread = (w.spread * (1 + speed * 0.12) + bloom) * Math.PI / 180;
   bloom = Math.min(2.5, bloom + w.bloom);
+
 
   const right = new THREE.Vector3().crossVectors(D, UP);
   if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
   right.normalize();
   const up = new THREE.Vector3().crossVectors(right, D);
 
+
   const enemies = getEnemies();
   const dmgMap = new Map();
   const dir = new THREE.Vector3();
+
 
   for (let i = 0; i < w.pellets; i++) {
     const r = Math.tan(spread) * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
@@ -521,6 +572,7 @@ function fire(player, dt) {
       dmgMap.set(hit.enemy, rec);
     }
   }
+
 
   for (const [e, rec] of dmgMap) {
     const died = hurtEnemy(e, Math.max(1, Math.round(rec.dmg)), { x: O.x, z: O.z });
@@ -538,13 +590,16 @@ function fire(player, dt) {
 }
 
 
+
 // ---------- keys (called from main.js) ----------
 export function handleGunKey(code) {
   if (!isActive) return false;
+  if (driving()) return false;
   if (code === 'KeyQ') { switchTo((cur + 1) % ORDER.length); return true; }
   if (code === 'KeyR') { startReload(); return true; }
   return false;
 }
+
 
 
 // ---------- per frame (call AFTER the camera has been positioned) ----------
@@ -561,9 +616,15 @@ export function updatePlayerGun(dt, player, playing) {
     return;
   }
 
+
   fireT -= dt; clickBuf -= dt; wheelT -= dt; flashT -= dt;
   bloom = Math.max(0, bloom - dt * 3);
   kick *= Math.exp(-dt * 14);
+
+
+  // driving the truck: no firing at all (covers the phone FIRE button too)
+  if (driving()) { holding = false; clickBuf = 0; }
+
 
   // weapon swap: lower -> change -> raise
   if (pending !== null) {
@@ -573,11 +634,13 @@ export function updatePlayerGun(dt, player, playing) {
     lower = Math.max(0, lower - dt / SWAP_TIME);
   }
 
+
   // reload
   if (reloading) {
     reloadT -= dt;
     if (reloadT <= 0) { reloading = false; ammo[ORDER[cur]] = W().mag; }
   }
+
 
   // firing
   const w = W(), k = ORDER[cur];
@@ -588,12 +651,14 @@ export function updatePlayerGun(dt, player, playing) {
   }
   if (ammo[k] === 0 && !reloading && fireT <= 0 && pending === null) startReload();
 
+
   // recoil settles back when you stop shooting
   if (fireT < -0.12 && recoil > 0.0001) {
     const back = recoil * Math.min(1, dt * RECOIL_BACK);
     player.pitch -= back;
     recoil -= back;
   }
+
 
   // pose (same idea as War): walking bob + recoil kick + reload dip + swap lowering,
   // all turning around the gun root
@@ -607,6 +672,7 @@ export function updatePlayerGun(dt, player, playing) {
   holder.position.set(ROOT[0] + bx, ROOT[1] + by - dip * 0.12 - lower * 0.3, ROOT[2] + kick * 0.05);
   holder.rotation.set(kick * 0.06 + dip * 0.5 + lower * 0.5, 0, -dip * 0.25);
 
+
   // flash: full strength for most of its life, then a quick fade
   const on = flashT > 0 && pending === null;
   flash.visible = on;
@@ -617,6 +683,7 @@ export function updatePlayerGun(dt, player, playing) {
     flashCore.material.opacity = f;
   }
   if (flashLight) flashLight.intensity = on ? LIGHT_POWER * Math.min(1, flashT / (FLASH_TIME * 0.6)) : 0;
+
 
   // hit marker + kill text
   if (hitT > 0) {
@@ -631,8 +698,10 @@ export function updatePlayerGun(dt, player, playing) {
     feedEl.style.opacity = Math.min(1, feedT / 0.4);
   } else feedEl.style.opacity = 0;
 
+
   drawHud();
 }
+
 
 
 // ---------- restart after death ----------
@@ -646,6 +715,7 @@ export function resetPlayerGun() {
   stats.shots = stats.hits = stats.kills = stats.heads = 0;
   showCur();
 }
+
 
 
 export function playerStats() {

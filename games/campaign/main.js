@@ -1,4 +1,4 @@
-// games/campaign/main.js   (v-mobile hook)
+// games/campaign/main.js   (v-mobile hook + full enemy count)
 // Campaign Mode: Roads, Military Base, Airfield, Port Town, & Nature.
 // - Named buildings, gates and fences (built by structures.js from layout.js)
 // - HUD shows the name of the building / gate you are near
@@ -15,8 +15,11 @@
 // - Player health, hit flash, YOU DIED screen with restart (this file)
 // - Extras (extras.js): sound, music, minimap, guide, base NPCs, drones, robots are loaded by extras.js
 //   (v: the extras get hurtPlayer, so drones and robots can hurt the player)
-// - PHONE HOOK (new): on a phone (hover:none + pointer:coarse) the game starts WITHOUT pointer lock,
+// - PHONE HOOK: on a phone (hover:none + pointer:coarse) the game starts WITHOUT pointer lock,
 //   and touch.js drives it through window.campaignTouch. On PC nothing changes.
+// - ENEMY COUNT (new): the HUD "ENEMIES" number and the YOU DIED "ENEMIES LEFT" number now include
+//   the living drones (drones.js) and robots (robots.js), not only the human Space Gang.
+
 
 import * as THREE from 'three';
 import { createTerrain, heightAt, zoneAt, ZONES, SPAWN, WORLD } from './terrain.js';
@@ -32,6 +35,7 @@ import { equipEnemy } from './weapons.js';
 import { initEnemies, updateEnemies, resetEnemies, enemiesAlive, killCount, enemiesInfo, getEnemies } from './enemies.js';
 import { initPlayerGun, updatePlayerGun, handleGunKey, resetPlayerGun, gunInfo } from './player.js';
 import { initExtras, updateExtras, handleExtrasKey, extrasEvent, resetExtras, extrasInfo } from './extras.js';
+
 
 /* ---------- Knobs (change these numbers to tune) ---------- */
 const EYE = 1.7;              // eye height above ground (m)
@@ -50,9 +54,11 @@ const PLAYER_R = 0.45;        // body radius for collision (m)
 const STEP_UP = 12;           // how fast you climb a step, e.g. onto the pier (m/s)
 const TOWN_SQUARE = { x: 120, z: 80 };   // where the "go to town" key sends the soldiers
 
+
 const MAX_HEALTH = 100;       // player health
 const REGEN_DELAY = 6;        // seconds without being hit before healing starts
 const REGEN_RATE = 4;         // health per second while healing
+
 
 const QUALITY = {
   low:    { ratio: 0.75, fogFar: 520 },
@@ -61,12 +67,15 @@ const QUALITY = {
 };
 const ORDER = ['low', 'medium', 'high'];
 
+
 // Phone = the main pointer is a finger (no mouse, no hover). A touch laptop with a mouse is NOT a phone.
 const PHONE = !!(window.matchMedia &&
   window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 
+
 const $ = (id) => document.getElementById(id);
 const loadingEl = $('loading');
+
 
 try {
   start();
@@ -74,6 +83,7 @@ try {
   console.error(err);
   loadingEl.textContent = 'Error: ' + err.message;
 }
+
 
 function start() {
   /* ---------- Renderer, scene, camera ---------- */
@@ -87,15 +97,18 @@ function start() {
   container.appendChild(renderer.domElement);
   const canvas = renderer.domElement;
 
+
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2500);
   camera.rotation.order = 'YXZ';
   scene.add(camera);
 
+
   const HORIZON = new THREE.Color(0xbfd9ec);
   const TOP = new THREE.Color(0x2f7fd1);
   scene.background = HORIZON.clone();
   scene.fog = new THREE.Fog(HORIZON.clone(), 60, 850);
+
 
   /* ---------- Sun and light ---------- */
   const sunDir = new THREE.Vector3(-0.5, 0.7, -0.45).normalize();
@@ -113,10 +126,12 @@ function start() {
   sun.shadow.bias = -0.0003;
   scene.add(sun, sun.target);
 
+
   // Balanced hemisphere & ambient light to prevent pitch-black shadows
   const hemi = new THREE.HemisphereLight(0xdbeeff, 0x6e7855, 1.1);
   const ambient = new THREE.AmbientLight(0xffffff, 0.35);
   scene.add(hemi, ambient);
+
 
   /* ---------- Sky dome ---------- */
   const skyMat = new THREE.ShaderMaterial({
@@ -148,6 +163,7 @@ function start() {
   sky.frustumCulled = false;
   scene.add(sky);
 
+
   /* ---------- Quality & World Building ---------- */
   let quality = localStorage.getItem(QUALITY_KEY);
   if (!QUALITY[quality]) quality = PHONE ? 'low' : 'medium';   // phones start on Low
@@ -155,6 +171,7 @@ function start() {
   let structures = null;
   const natureGroup = new THREE.Group();
   scene.add(natureGroup);
+
 
   function buildWorld() {
     if (terrain) {
@@ -167,15 +184,18 @@ function start() {
     terrain = createTerrain(quality);
     scene.add(terrain.mesh, terrain.water);
 
+
     // Rebuild nature (trees & rocks)
     natureGroup.clear();
     createNature(natureGroup, quality);
+
 
     // Build roads, base, airfield and town once
     if (!structures) {
       structures = createStructures(scene);
     }
   }
+
 
   function applyQuality() {
     const q = QUALITY[quality];
@@ -185,10 +205,40 @@ function start() {
     $('quality-btn').textContent = 'Quality: ' + quality.charAt(0).toUpperCase() + quality.slice(1);
   }
 
+
   buildWorld();
   applyQuality();
 
+
   const colDebug = createCollisionDebug(scene);
+
+
+  /* ---------- Total enemy count: humans + drones + robots ---------- */
+  // drones.js and robots.js are loaded by extras.js; importing them here gives the SAME module,
+  // so we only read their lists. If a file is missing, that part simply counts as 0.
+  let getDronesFn = null, getRobotsFn = null;
+  import('./drones.js').then((m) => { if (typeof m.getDrones === 'function') getDronesFn = m.getDrones; })
+    .catch(() => { /* counts as 0 */ });
+  import('./robots.js').then((m) => { if (typeof m.getRobots === 'function') getRobotsFn = m.getRobots; })
+    .catch(() => { /* counts as 0 */ });
+
+
+  function countAlive(fn) {
+    if (!fn) return 0;
+    try {
+      const list = fn();
+      if (!Array.isArray(list)) return 0;
+      let n = 0;
+      for (const e of list) if (e && !e.dead) n++;
+      return n;
+    } catch (e) { return 0; }
+  }
+
+
+  function totalEnemies() {
+    return enemiesAlive() + countAlive(getDronesFn) + countAlive(getRobotsFn);
+  }
+
 
   /* ---------- Human characters ---------- */
   let charsReady = false;
@@ -201,8 +251,10 @@ function start() {
       console.error('[characters] failed to load', err);
     });
 
+
   /* ---------- Training (Barracks) ---------- */
   initTraining(scene, () => charsReady);
+
 
   /* ---------- Player ---------- */
   const player = {
@@ -221,6 +273,7 @@ function start() {
   let playing = false;
   let firstPlay = true;
 
+
   /* ---------- Player health, hit flash, death screen ---------- */
   let health = MAX_HEALTH;
   let sinceHit = 99;            // seconds since the last hit
@@ -228,6 +281,7 @@ function start() {
   let arrowV = 0, arrowAng = 0; // hit-direction arrow
   let deathT = 0;
   let healthShown = '';
+
 
   const mk = (css) => {
     const el = document.createElement('div');
@@ -253,6 +307,7 @@ function start() {
     '<div id="hp-fill" style="height:100%;width:100%;background:#3ddc6b"></div></div>';
   const hpText = healthEl.querySelector('#hp-text'), hpFill = healthEl.querySelector('#hp-fill');
 
+
   const deathEl = mk('position:fixed;left:0;top:0;right:0;bottom:0;display:none;z-index:60;' +
     'background:rgba(35,0,0,0.82);color:#fff;font-family:Consolas,monospace;text-align:center;' +
     'flex-direction:column;align-items:center;justify-content:center;');
@@ -262,6 +317,7 @@ function start() {
     'color:#fff;background:#b3261e;border:2px solid #ff6b60;border-radius:6px;cursor:pointer">↻ RESTART MISSION</button>' +
     '<div style="margin-top:12px;font-size:12px;opacity:.55">or press Enter</div>';
   const deathInfo = deathEl.querySelector('#death-info');
+
 
   function hurtPlayer(dmg, fromX, fromZ) {
     if (player.dead || !playing) return;               // paused = safe
@@ -279,12 +335,13 @@ function start() {
     if (health <= 0) { health = 0; die(); }
   }
 
+
   function die() {
     player.dead = true;
     deathT = 0;
     player.fly = false;
     for (const k in keys) keys[k] = false;
-    deathInfo.textContent = 'ENEMIES KILLED: ' + killCount() + '   ·   ENEMIES LEFT: ' + enemiesAlive();
+    deathInfo.textContent = 'ENEMIES KILLED: ' + killCount() + '   ·   ENEMIES LEFT: ' + totalEnemies();
     deathEl.style.display = 'flex';
     startScreen.classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
@@ -292,6 +349,7 @@ function start() {
     extrasEvent('died', {});
     console.log('[player] died. Kills: ' + killCount());
   }
+
 
   function restart() {
     if (!player.dead) return;
@@ -313,6 +371,7 @@ function start() {
     extrasEvent('restart', {});
     console.log('[player] restarted');
   }
+
 
   function updateHealth(dt) {
     sinceHit += dt;
@@ -336,8 +395,10 @@ function start() {
     }
   }
 
+
   deathEl.querySelector('#restart-btn').addEventListener('click', restart);
   window.addEventListener('keydown', (e) => { if (player.dead && e.code === 'Enter') restart(); });
+
 
   /* ---------- Enemies (Space Gang) and your weapon ---------- */
   initEnemies(scene, {
@@ -348,6 +409,7 @@ function start() {
     equip: equipEnemy
   });
   initPlayerGun(camera, scene);
+
 
   /* ---------- Extras: sound, music, minimap, guide, base NPCs, drones, robots (extras.js) ---------- */
   initExtras({
@@ -360,6 +422,7 @@ function start() {
     isPlaying: () => playing
   }).catch((err) => console.warn('[extras] failed to start', err));
 
+
   /* ---------- Input (keys come from keybinds.js) ---------- */
   window.addEventListener('keydown', (e) => {
     if (!playing) return;
@@ -367,14 +430,18 @@ function start() {
     if (e.code === 'Space' || matches('jump', e.code)) e.preventDefault();
     if (e.repeat) return;
 
+
     // Barracks: Use key opens the menu, 1 / 2 / 3 train while it is open
     if (handleTrainingKey(e.code, player)) return;
+
 
     // Your weapon: Q switch, R reload
     if (handleGunKey(e.code)) return;
 
+
     // Extras: map key and others
     if (handleExtrasKey(e.code)) return;
+
 
     if (matches('fly', e.code)) {
       player.fly = !player.fly;
@@ -392,6 +459,7 @@ function start() {
         console.log('[characters] test squad:', res);
       }
     }
+
 
     // soldier keys
     if (matches('spawn', e.code)) {
@@ -414,6 +482,7 @@ function start() {
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
+
   document.addEventListener('mousemove', (e) => {
     if (document.pointerLockElement !== canvas) return;
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
@@ -422,8 +491,10 @@ function start() {
     player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch));
   });
 
+
   /* ---------- Menus & UI ---------- */
   const startScreen = $('start-screen'), hud = $('hud'), cross = $('crosshair');
+
 
   function lockPointer() {
     try {
@@ -431,6 +502,7 @@ function start() {
       if (p && p.catch) p.catch(() => {});
     } catch (e) { /* ignore */ }
   }
+
 
   // One place that switches the game on / off (PC: pointer lock changes, phone: buttons).
   function setPlaying(on) {
@@ -447,9 +519,11 @@ function start() {
     window.dispatchEvent(new CustomEvent('campaign:playing', { detail: { playing } }));
   }
 
+
   document.addEventListener('pointerlockchange', () => {
     setPlaying(document.pointerLockElement === canvas);
   });
+
 
   // Phone: try fullscreen (Android; iPhone ignores it). Must run inside a tap.
   function tryFullscreen() {
@@ -463,10 +537,12 @@ function start() {
     } catch (e) { /* ignore */ }
   }
 
+
   $('play-btn').addEventListener('click', () => {
     if (PHONE) { tryFullscreen(); if (!player.dead) setPlaying(true); }
     else lockPointer();
   });
+
 
   $('quality-btn').addEventListener('click', () => {
     quality = ORDER[(ORDER.indexOf(quality) + 1) % ORDER.length];
@@ -474,6 +550,7 @@ function start() {
     $('quality-btn').textContent = 'Building...';
     setTimeout(() => { buildWorld(); applyQuality(); }, 30);
   });
+
 
   if (PHONE) {
     // phones can play now: keep the start button, hide the old "PC only" note
@@ -486,6 +563,7 @@ function start() {
     $('touch-note').classList.remove('hidden');
     $('play-btn').classList.add('hidden');
   }
+
 
   // Door for touch.js (loaded on phones only). On PC nobody calls it.
   window.campaignTouch = {
@@ -505,17 +583,21 @@ function start() {
     }
   };
 
+
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
+
   /* ---------- Movement Simulation ---------- */
   const HALF = WORLD.size / 2 - 5;
 
+
   // Can you stand here? Land above deep water, or the pier deck.
   const walkable = (x, z) => heightAt(x, z) > WATER_BLOCK || onPier(x, z);
+
 
   function update(dt) {
     // keyboard + joystick (joystick values are 0 on PC)
@@ -524,6 +606,7 @@ function start() {
     const sprinting = isDown(keys, 'sprint') || touchState.sprint;
     const jumping = isDown(keys, 'jump') || touchState.jump;
     const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+
 
     if (player.fly) {
       const sp = sprinting ? FLY_FAST : FLY_SPEED;
@@ -550,6 +633,7 @@ function start() {
       player.vx += (tx - player.vx) * k;
       player.vz += (tz - player.vz) * k;
 
+
       const nx = player.x + player.vx * dt, nz = player.z + player.vz * dt;
       let px = player.x, pz = player.z;
       if (walkable(nx, nz)) { px = nx; pz = nz; }
@@ -557,6 +641,7 @@ function start() {
       else if (walkable(player.x, nz)) pz = nz;
       const fixed = resolveCollision(px, pz, PLAYER_R);
       player.x = fixed.x; player.z = fixed.z;
+
 
       if (jumping && player.grounded) { player.vy = JUMP; player.grounded = false; }
       player.vy -= GRAVITY * dt;
@@ -575,12 +660,15 @@ function start() {
       }
     }
 
+
     player.x = Math.max(-HALF, Math.min(HALF, player.x));
     player.z = Math.max(-HALF, Math.min(HALF, player.z));
   }
 
+
   /* ---------- HUD text (zone + nearby building / gate name) ---------- */
   const infoEl = $('hud-info'), modeEl = $('hud-mode');
+
 
   function updateModeText() {
     let text = zoneAt(player.x, player.z);
@@ -592,18 +680,21 @@ function start() {
     if (player.fly) text += '  ·  FLY MODE';
     const n = getSoldiers().length;                  // soldier count on the HUD
     if (n) text += '  ·  SQUAD ' + n;
-    if (charsReady) text += '  ·  ENEMIES ' + enemiesAlive();
+    if (charsReady) text += '  ·  ENEMIES ' + totalEnemies();   // humans + drones + robots
     modeEl.textContent = text;
   }
+
 
   /* ---------- Main Loop ---------- */
   const clock = new THREE.Clock();
   let fpsTimer = 0, fpsFrames = 0, time = 0, hudTimer = 0;
 
+
   function frame() {
     requestAnimationFrame(frame);
     const dt = Math.min(clock.getDelta(), 0.05);
     time += dt;
+
 
     if (playing) update(dt);
     updateTraining(dt, player, playing);             // supplies, queues, on-screen menu
@@ -613,6 +704,7 @@ function start() {
       updateCharacters(dt);
     }
     updateHealth(dt);
+
 
     camera.position.set(player.x, player.y, player.z);
     camera.rotation.set(player.pitch, player.yaw, 0);
@@ -630,7 +722,9 @@ function start() {
     terrain.update(time);
     if (structures && structures.update) structures.update(dt);
 
+
     renderer.render(scene, camera);
+
 
     if (playing) {
       hudTimer += dt;
@@ -639,6 +733,7 @@ function start() {
         updateModeText();
       }
     }
+
 
     fpsFrames++; fpsTimer += dt;
     if (fpsTimer >= 0.5) {
@@ -650,6 +745,7 @@ function start() {
       }
     }
   }
+
 
   // Done
   loadingEl.classList.add('hidden');

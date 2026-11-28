@@ -1,4 +1,4 @@
-// games/campaign/robots.js  (v1)
+// games/campaign/robots.js  (v2)
 // Space Gang ground robots for Port Town (look copied from War: code-built mech and sentry turret).
 //  - 2 MECHS near the Town Hall / square: slow, tough, they walk (walls and trees block them, they use the A* paths when
 //    they lose sight of you), keep 14-26 m away and fire red bursts from two arm guns.
@@ -8,9 +8,12 @@
 //    above a robot once it is damaged.
 //  - Your soldiers and the base guards shoot back.  Own sounds, own explosions.
 //  - The player cannot walk through a robot (gentle push-out).
+//  v2: your shots now fly OVER low cover (sandbags, barriers) when you aim over it, and the robots' hit boxes
+//      match their models (bigger), so far shots on turrets and mechs hit.
 // Loaded by extras.js ('robots' is already in MODULES).
 // Console: spawnMech(), spawnTurret(), robotsInfo()
 // For other files: getRobots(), robotsAlive(), spawnRobot('mech'|'turret', x, z, {scale, hp, temp, leash})
+
 
 import * as THREE from 'three';
 import { blockedAt, lineClear, groundHeight } from './collision.js';
@@ -20,6 +23,7 @@ import { getBaseGuards } from './base-npcs.js';
 import { difficultyName } from './enemies.js';
 import { extrasEvent } from './extras.js';
 
+
 /* ---------- Where they stand (x, z). A spot inside a wall is moved to the nearest free spot ---------- */
 const TOWN    = { x: 120, z: 80 };
 const MECHS   = [{ x: 106, z: 91 }, { x: 134, z: 91 }];
@@ -27,6 +31,7 @@ const TURRETS = [{ x: 96, z: 89 },      // West Checkpoint
                  { x: 150, z: 70 },     // East Barricade
                  { x: 129, z: 108 },    // South Checkpoint
                  { x: 106, z: 67 }];    // Town Hall front
+
 
 /* ---------- Mech settings ---------- */
 const MECH_SCALE   = 1.2;                              // same as War
@@ -39,7 +44,8 @@ const KEEP_MAX     = 26;           // walks closer if you are further
 const MECH_SPEED   = 2.4;
 const MECH_TURN    = 2.2;          // body turn speed (rad/s)
 const MECH_R       = 1.3;          // collision radius (walls and trees)
-const MECH_HIT_R   = 1.4;          // your bullets: radius (x scale)
+const MECH_HIT_R   = 1.9;          // your bullets: radius (x scale)  (v2: was 1.4)
+const MECH_BODY_R  = 1.4;          // the solid body you cannot walk through (x scale)
 const MECH_HEIGHT  = 4.6;          // your bullets: height (x scale)
 const MECH_BURST   = 4;
 const MECH_GAP     = 0.35;
@@ -49,6 +55,7 @@ const MECH_HIT     = 0.55;         // base chance to hit, falls with distance
 const MECH_HIT_FALL = 0.008;
 const MECH_LEASH   = 75;           // never walks further than this from its post
 const PATROL_R     = 8;            // idle patrol around its post
+
 
 /* ---------- Turret settings ---------- */
 const TURRET_HP    = { easy: 150, normal: 200, hard: 260 };
@@ -62,9 +69,10 @@ const TURRET_PAUSE = 1.4;
 const TURRET_REACT = 0.6;
 const LOCK_RISE    = 0.5;          // per second while it sees you
 const LOCK_FALL    = 1.0;
-const TURRET_HIT_R = 0.9;
-const TURRET_HEIGHT = 1.5;
+const TURRET_HIT_R = 1.25;         // your bullets: radius  (v2: was 0.9)
+const TURRET_HEIGHT = 1.8;         // your bullets: height  (v2: was 1.5)
 const TURRET_SWEEP = 0.9;          // idle scan angle (rad)
+
 
 /* ---------- Shared settings ---------- */
 const HIT_MIN      = 0.12;
@@ -78,12 +86,16 @@ const SHADOWS      = true;
 const VOLUME       = 0.8;
 const MAX_DIST     = 140;          // sounds fade out at this distance
 const MAX_TOTAL    = 12;           // with test robots
+const LOW_COVER    = 1.3;          // your bullet flies over cover when it is higher than this above the ground (m)
+const THICK_WALL   = 1.5;          // a wall thicker than this (m) always stops your bullet (buildings)
+
 
 const SHOTS = {                    // same numbers as your guns in player.js
   pistol:  { dmg: 28, range: 70,  pellets: 1, spread: 0 },
   rifle:   { dmg: 18, range: 130, pellets: 1, spread: 0 },
   shotgun: { dmg: 14, range: 35,  pellets: 8, spread: 0.04 }
 };
+
 
 /* ---------- State ---------- */
 let C = null, scene = null, started = false;
@@ -94,6 +106,7 @@ const camPos = new THREE.Vector3();
 const TP = { x: 0, y: 0, z: 0 };
 const MP = new THREE.Vector3();
 
+
 /* ---------- Helpers ---------- */
 const pick = (tbl) => tbl[difficultyName()] || tbl.normal;
 function angDiff(a, b) {
@@ -103,6 +116,7 @@ function angDiff(a, b) {
   return d;
 }
 const mats = (o) => (Array.isArray(o.material) ? o.material : [o.material]);
+
 
 /* ---------- Models (copied from War models.js) ---------- */
 function mat(color, o = {}) {
@@ -122,6 +136,7 @@ function cyl(rt, rb, h, m, x = 0, y = 0, z = 0, seg = 16) {
   me.position.set(x, y, z);
   return me;
 }
+
 
 function buildMech(scale) {
   const g = new THREE.Group();
@@ -152,12 +167,14 @@ function buildMech(scale) {
   return g;
 }
 
+
 function animateMech(g, phase, amount) {
   const u = g.userData;
   u.legL.rotation.x =  Math.sin(phase) * 0.45 * amount;
   u.legR.rotation.x = -Math.sin(phase) * 0.45 * amount;
   u.torso.position.y = 3.2 + Math.abs(Math.sin(phase)) * 0.08 * amount;
 }
+
 
 function buildTurret() {
   const g = new THREE.Group();
@@ -180,6 +197,7 @@ function buildTurret() {
   return g;
 }
 
+
 function glow(obj, color, intensity) {
   const c = new THREE.Color(color);
   obj.traverse((o) => {
@@ -200,6 +218,7 @@ function unglow(obj) {
     });
   });
 }
+
 
 /* ---------- Health bar above a damaged robot ---------- */
 function makeBar(r) {
@@ -224,6 +243,7 @@ function drawBar(r) {
   c.fillRect(2, 2, 124 * f, 12);
   r.barTex.needsUpdate = true;
 }
+
 
 /* ---------- Beams (tracers) ---------- */
 const beams = [];
@@ -259,6 +279,7 @@ function updateBeams(dt) {
     else b.l.material.opacity = b.life / b.max;
   }
 }
+
 
 /* ---------- Explosion effect ---------- */
 const fx = [];
@@ -318,6 +339,7 @@ function clearFx() {
   for (const f of fx) dropFx(f);
   fx.length = 0;
 }
+
 
 /* ---------- Sound (own small audio graph) ---------- */
 let AC = null, master = null, noiseBuf = null;
@@ -399,6 +421,7 @@ function sound(kind, x, y, z) {
   }
 }
 
+
 /* ---------- Warning text ---------- */
 let warnEl = null;
 function warn(text) {
@@ -416,6 +439,7 @@ function warn(text) {
   setTimeout(() => { if (warnEl) warnEl.style.opacity = '0'; }, 2500);
 }
 
+
 /* ---------- Finding a free spot ---------- */
 function findFree(x, z, r) {
   if (!blockedAt(x, z, r)) return { x, z };
@@ -428,6 +452,7 @@ function findFree(x, z, r) {
   }
   return null;
 }
+
 
 /* ---------- Creating robots ---------- */
 function createRobot(kind, x, z, o = {}) {
@@ -463,12 +488,14 @@ function createRobot(kind, x, z, o = {}) {
   return r;
 }
 
+
 function spawnAll() {
   let m = 0, t = 0;
   for (const p of MECHS) if (createRobot('mech', p.x, p.z)) m++;
   for (const p of TURRETS) if (createRobot('turret', p.x, p.z)) t++;
   console.log('[robots] ' + m + ' mechs and ' + t + ' turrets guard Port Town');
 }
+
 
 function testSpawn(kind, dist) {
   if (!started || !C) return 'robots are not ready yet';
@@ -478,6 +505,7 @@ function testSpawn(kind, dist) {
   const r = createRobot(kind, camPos.x + dir.x * dist, camPos.z + dir.z * dist, { temp: true, leash: 90 });
   return r ? kind + ' spawned ' + dist + ' m ahead' : 'no free spot there, turn around and try again';
 }
+
 
 /* ---------- Targets ---------- */
 function buildTargets() {
@@ -493,11 +521,13 @@ function buildTargets() {
   } catch (e) { /* ignore */ }
 }
 
+
 function tpos(t, out) {
   const r = t.ref;
   out.x = r.x; out.z = r.z;
   out.y = t.kind === 'player' ? camPos.y - 0.5 : groundHeight(r.x, r.z) + 1.2;
 }
+
 
 const cand = [];
 function pickTarget(r, sight) {
@@ -514,6 +544,7 @@ function pickTarget(r, sight) {
   }
   return null;
 }
+
 
 function sense(r) {
   const mech = r.kind === 'mech';
@@ -545,12 +576,14 @@ function sense(r) {
   if (!t && was === 'fight') { r.burstLeft = 0; r.lock = 0; r.path = null; r.wp = null; r.idleT = 2; }
 }
 
+
 /* ---------- Combat ---------- */
 function damageTarget(t, dmg, r) {
   if (t.kind === 'player') { if (C.hurtPlayer) C.hurtPlayer(dmg, r.x, r.z); }
   else if (t.kind === 'soldier') hurtSoldier(t.ref, dmg);
   else if (t.ref.hurt) t.ref.hurt(dmg);
 }
+
 
 function shoot(r, t, chance, dmg, mx, my, mz) {
   tpos(t, TP);
@@ -566,6 +599,7 @@ function shoot(r, t, chance, dmg, mx, my, mz) {
   if (hit) damageTarget(t, dmg, r);
 }
 
+
 function fireMech(r, t) {
   const u = r.g.userData;
   r.g.updateMatrixWorld(true);
@@ -575,6 +609,7 @@ function fireMech(r, t) {
   const dist = Math.hypot(TP.x - r.x, TP.z - r.z);
   shoot(r, t, Math.max(HIT_MIN, MECH_HIT - MECH_HIT_FALL * dist), pick(MECH_DMG), MP.x, MP.y, MP.z);
 }
+
 
 function fireTurret(r, t) {
   const u = r.g.userData;
@@ -586,6 +621,7 @@ function fireTurret(r, t) {
   shoot(r, t, chance, pick(TURRET_DMG), MP.x, MP.y, MP.z);
 }
 
+
 function updateBar(r) {
   if (!r.bar) return;
   const show = !r.dead && r.hp < r.maxHp && r.g.visible &&
@@ -593,6 +629,7 @@ function updateBar(r) {
   r.bar.visible = show;
   if (show) r.bar.position.set(r.x, r.y + r.h + 0.9, r.z);
 }
+
 
 function killRobot(r) {
   r.dead = true; r.deadT = 0; r.target = null; r.burstLeft = 0; r.state = 'idle';
@@ -602,6 +639,7 @@ function killRobot(r) {
   boom(r.x, r.y + r.h * 0.5, r.z, big);
   sound(big ? 'boom' : 'boomSmall', r.x, r.y + r.h * 0.5, r.z);
 }
+
 
 function hurtRobot(r, amount, from) {
   if (r.dead) return false;
@@ -620,6 +658,7 @@ function hurtRobot(r, amount, from) {
   return false;
 }
 
+
 // soldiers and base guards shoot back
 function allyFire(r) {
   let shots = 0;
@@ -636,6 +675,7 @@ function allyFire(r) {
   }
 }
 
+
 /* ---------- Your bullets ---------- */
 const _o = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3();
 const _u = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -647,6 +687,7 @@ function pelletDir(base, spread, out) {
   const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * spread;
   out.copy(base).addScaledVector(_u, Math.cos(a) * rr).addScaledVector(_v, Math.sin(a) * rr).normalize();
 }
+
 
 // ray against an upright cylinder; returns the distance along the ray, or -1
 function rayCyl(o, d, cx, cz, rad, y0, y1, range) {
@@ -678,6 +719,23 @@ function rayCyl(o, d, cx, cz, rad, y0, y1, range) {
   return t0;
 }
 
+
+// v2: is a wall in the way of the bullet (_o, _d) before it reaches distance tEnd?
+// lineClear() is flat and ignores height, so low sandbags/barriers used to stop shots that fly over them.
+// Now: low cover blocks only a LOW shot, a thick wall (a building) always blocks.
+// The last 2 m before the robot are ignored (its own sandbags).
+function shotBlocked(tEnd) {
+  let run = 0;
+  for (let t = 1; t < tEnd - 2; t += 0.5) {
+    const x = _o.x + _d.x * t, z = _o.z + _d.z * t;
+    if (!blockedAt(x, z, 0.05)) { run = 0; continue; }
+    run++;
+    if (_o.y + _d.y * t - groundHeight(x, z) < LOW_COVER || run * 0.5 >= THICK_WALL) return true;
+  }
+  return false;
+}
+
+
 function playerShot(kind) {
   const s = SHOTS[kind] || SHOTS.rifle;
   C.camera.getWorldPosition(_o);
@@ -692,7 +750,7 @@ function playerShot(kind) {
       if (t >= 0 && t < bestT) { best = r; bestT = t; }
     }
     if (!best) continue;
-    if (!lineClear(_o.x, _o.z, _o.x + _d.x * bestT, _o.z + _d.z * bestT)) continue;   // a wall or tree is in the way
+    if (shotBlocked(bestT)) continue;                                                  // a wall is in the way
     const fall = s.pellets > 1 ? 1 - 0.5 * (bestT / s.range) : 1;
     dmgMap.set(best, (dmgMap.get(best) || 0) + s.dmg * fall);
   }
@@ -702,6 +760,7 @@ function playerShot(kind) {
   try { extrasEvent('hit', { head: false }); if (killed) extrasEvent('kill', { head: false }); } catch (e) { /* ignore */ }
 }
 
+
 /* ---------- Walking (mechs) ---------- */
 function stepMove(r, dx, dz) {
   const nx = r.x + dx, nz = r.z + dz;
@@ -710,6 +769,7 @@ function stepMove(r, dx, dz) {
   if (!blockedAt(r.x, nz, MECH_R)) { r.z = nz; return true; }
   return false;
 }
+
 
 function toPoints(p) {
   try {
@@ -724,6 +784,7 @@ function toPoints(p) {
       .filter((q) => q && isFinite(q.x) && isFinite(q.z));
   } catch (e) { return null; }
 }
+
 
 // next point on an A* path to (tx, tz)
 function pathStep(r, tx, tz, dt) {
@@ -740,6 +801,7 @@ function pathStep(r, tx, tz, dt) {
   return { x: tx, z: tz };
 }
 
+
 function pickWp(r) {
   for (let k = 0; k < 12; k++) {
     const a = Math.random() * Math.PI * 2, d = 2 + Math.random() * PATROL_R;
@@ -749,10 +811,12 @@ function pickWp(r) {
   return { x: r.hx, z: r.hz };
 }
 
+
 function updateMech(r, dt) {
   let dirx = 0, dirz = 0, speed = 0;
   let faceYaw = r.yaw;
   const t = r.target;
+
 
   if (r.state === 'fight' && t) {
     tpos(t, TP);
@@ -760,6 +824,7 @@ function updateMech(r, dt) {
     const dist = Math.hypot(dx, dz) || 0.001;
     const nx = dx / dist, nz = dz / dist;
     faceYaw = Math.atan2(-dx, -dz);
+
 
     if (r.clear) {
       if (dist > KEEP_MAX) { dirx = nx; dirz = nz; speed = MECH_SPEED; }
@@ -769,6 +834,7 @@ function updateMech(r, dt) {
       const px = p.x - r.x, pz = p.z - r.z, pd = Math.hypot(px, pz) || 0.001;
       dirx = px / pd; dirz = pz / pd; speed = MECH_SPEED;
     }
+
 
     r.reactT -= dt;
     if (r.pauseT > 0) r.pauseT -= dt;
@@ -803,12 +869,14 @@ function updateMech(r, dt) {
     } else r.idleT = 2;
   }
 
+
   // sidestep when stuck behind something
   if (r.sideT > 0) {
     r.sideT -= dt;
     const px = -dirz * r.sideDir, pz = dirx * r.sideDir;
     dirx = px; dirz = pz; speed = Math.max(speed, MECH_SPEED * 0.6);
   }
+
 
   let moved = 0;
   if (speed > 0) {
@@ -824,9 +892,11 @@ function updateMech(r, dt) {
     } else r.stuckT = 0;
   } else r.stuckT = 0;
 
+
   // turn the body
   const diff = angDiff(r.yaw, faceYaw);
   r.yaw += Math.max(-MECH_TURN * dt, Math.min(MECH_TURN * dt, diff));
+
 
   // walk animation and footsteps
   r.amt += ((moved > 0.001 ? 1 : 0) - r.amt) * Math.min(1, dt * 6);
@@ -835,15 +905,18 @@ function updateMech(r, dt) {
   const sn = Math.floor(r.phase / Math.PI);
   if (sn !== r.stepN) { r.stepN = sn; if (r.amt > 0.3) sound('step', r.x, r.y, r.z); }
 
+
   r.y += (groundHeight(r.x, r.z) - r.y) * Math.min(1, dt * 8);
   r.g.position.set(r.x, r.y, r.z);
   r.g.rotation.y = r.yaw;
 }
 
+
 /* ---------- Turrets ---------- */
 function updateTurret(r, dt) {
   const t = r.target;
   const head = r.g.userData.head;
+
 
   if (r.state === 'fight' && t) {
     tpos(t, TP);
@@ -854,6 +927,7 @@ function updateTurret(r, dt) {
     r.hy += Math.max(-TURRET_TURN * dt, Math.min(TURRET_TURN * dt, diff));
     if (r.clear && Math.abs(diff) < 0.3) r.lock = Math.min(1, r.lock + LOCK_RISE * dt);
     else r.lock = Math.max(0, r.lock - LOCK_FALL * dt);
+
 
     r.reactT -= dt;
     if (r.pauseT > 0) r.pauseT -= dt;
@@ -876,6 +950,7 @@ function updateTurret(r, dt) {
   head.rotation.y = r.hy;
 }
 
+
 /* ---------- Per robot, every frame ---------- */
 function updateRobot(r, dt) {
   if (r.dead) {
@@ -885,17 +960,22 @@ function updateRobot(r, dt) {
   }
   if (r.flash > 0) { r.flash -= dt; if (r.flash <= 0) unglow(r.g); }
 
+
   r.senseT -= dt;
   if (r.senseT <= 0) { r.senseT = 0.35; sense(r); }
 
+
   r.g.visible = Math.hypot(r.x - camPos.x, r.z - camPos.z) < SHOW_DIST;
+
 
   if (r.kind === 'mech') updateMech(r, dt); else updateTurret(r, dt);
   updateBar(r);
 
+
   r.allyT -= dt;
   if (r.allyT <= 0) { r.allyT = 0.6; if (r.g.visible) allyFire(r); }
 }
+
 
 // the player cannot walk through a robot
 function pushPlayer() {
@@ -904,7 +984,7 @@ function pushPlayer() {
   for (const r of robots) {
     if (r.dead || !r.g.visible) continue;
     if (p.y > groundHeight(r.x, r.z) + r.h + 1.5) continue;       // flying above it
-    const rad = (r.kind === 'mech' ? MECH_HIT_R * r.sc * 0.8 : 0.95) + 0.5;
+    const rad = (r.kind === 'mech' ? MECH_BODY_R * r.sc * 0.8 : 0.95) + 0.5;
     const dx = p.x - r.x, dz = p.z - r.z;
     const d = Math.hypot(dx, dz);
     if (d < rad) {
@@ -914,6 +994,7 @@ function pushPlayer() {
     }
   }
 }
+
 
 function resetRobot(r) {
   r.hp = r.maxHp = r.maxHp || pick(r.kind === 'mech' ? MECH_HP : TURRET_HP);
@@ -928,6 +1009,7 @@ function resetRobot(r) {
   r.g.visible = true;
   if (r.bar) r.bar.visible = false;
 }
+
 
 /* ---------- extras.js hooks ---------- */
 export function init(ctx) {
@@ -945,6 +1027,7 @@ export function init(ctx) {
   };
 }
 
+
 export function update(dt, ctx) {
   C = ctx;
   if (!started) {
@@ -955,10 +1038,12 @@ export function update(dt, ctx) {
   ctx.camera.getWorldPosition(camPos);
   if (!ctx.isPlaying()) return;                            // paused: everything freezes
 
+
   clockT += dt;
   ac();
   senseT -= dt;
   if (senseT <= 0) { senseT = 0.3; buildTargets(); }
+
 
   for (const r of robots) updateRobot(r, dt);
   pushPlayer();
@@ -966,12 +1051,14 @@ export function update(dt, ctx) {
   updateFx(dt);
 }
 
+
 export function onEvent(name, data, ctx) {
   C = ctx || C;
   if (!started || !C) return;
   if (name === 'shot') playerShot((data && data.kind) || 'rifle');
   else if (name === 'restart') reset(C);
 }
+
 
 export function reset(ctx) {
   for (let i = robots.length - 1; i >= 0; i--) {
@@ -987,6 +1074,7 @@ export function reset(ctx) {
   for (const b of beams) { b.life = 0; b.l.visible = false; }
   clearFx();
 }
+
 
 /* ---------- for other files (missions, waves, minimap) ---------- */
 export function getRobots() { return robots; }

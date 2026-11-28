@@ -1,5 +1,5 @@
 // ============================================================
-// sound.js  (NEW FILE)  ->  games/campaign/sound.js
+// sound.js  (v2)  ->  games/campaign/sound.js
 // Campaign audio, all free:
 //   - ONE real gunshot recording (game-hub/sounds/gunshot.mp3, the same file War uses),
 //     pitched per weapon, quieter + muffled + panned with distance
@@ -9,18 +9,26 @@
 // Your own gun: player.js can fire extrasEvent('shot', {kind}), 'reload', 'empty',
 // 'swap', 'hit', 'kill' and this file plays the sounds.
 // Loaded by extras.js. Safe to delete (the game still runs, just silent).
+//
+// v2: follows the MASTER volume saved in nova_settings (menu + Settings screen),
+//     live: window event 'nova-volume' {detail:{master}}; default 0.8 sounds as before.
+//     Soldiers hidden inside the truck no longer make gunshot sounds.
 // ============================================================
 import { heightAt, WATER_LEVEL } from './terrain.js';
 import { getEnemies } from './enemies.js';
 import { getSoldiers } from './units.js';
 
+
 // ---------- knobs ----------
 const GUN_URL = new URL('../../sounds/gunshot.mp3', import.meta.url).href;
 const VOL = { master: 0.7, sfx: 0.8, amb: 0.45 };
+const SETTINGS_KEY = 'nova_settings';
+const MASTER_DEFAULT = 0.8;     // the menu's default; at this value VOL.master is used as is
 const MAX_VOICES = 12;          // gunshots playing at once
 const MAX_DIST = 120;           // a gunshot fades to silence at this distance (m)
 const AUDIBLE = 160;            // beyond this nothing is played (m)
 const GUN_VARIATION = 0.07;     // random pitch change per shot
+
 
 // rate = pitch, vol = loudness, len = fade-out time (0 = whole sample), layer = deeper copy level
 const GUN = {
@@ -30,6 +38,7 @@ const GUN = {
   enemyShot: { rate: 1.18, vol: 0.55, len: 0.28, layer: 0 },
   guardShot: { rate: 1.05, vol: 0.65, len: 0.28, layer: 0 }
 };
+
 
 // ---------- state ----------
 let ctx = null;
@@ -41,8 +50,31 @@ let seaGain = null, windGain = null;
 let seaT = 0, sea = 0;
 let guardsFn = null;
 let initDone = false;
+let userMaster = MASTER_DEFAULT;
+
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+
+// ---------- master volume (shared with the menu and the Settings screen) ----------
+function readMaster() {
+  try {
+    const o = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const m = parseFloat(o.master);
+    return isNaN(m) ? MASTER_DEFAULT : clamp(m, 0, 1);
+  } catch (e) { return MASTER_DEFAULT; }
+}
+
+
+function masterGain() { return VOL.master * (userMaster / MASTER_DEFAULT); }
+
+
+function applyMaster(smooth) {
+  if (!master) return;
+  if (smooth) master.gain.setTargetAtTime(masterGain(), ac.currentTime, 0.04);
+  else master.gain.value = masterGain();
+}
+
 
 // ---------- audio graph ----------
 function buildAudio() {
@@ -50,21 +82,26 @@ function buildAudio() {
   if (!AC) throw new Error('no WebAudio');
   ac = new AC();
 
+
+  userMaster = readMaster();
   const comp = ac.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 6;
-  master = ac.createGain(); master.gain.value = VOL.master;
+  master = ac.createGain(); master.gain.value = masterGain();
   sfxBus = ac.createGain(); sfxBus.gain.value = VOL.sfx;
   ambBus = ac.createGain(); ambBus.gain.value = 0;
   sfxBus.connect(master); ambBus.connect(master);
   master.connect(comp); comp.connect(ac.destination);
+
 
   // 2 s of white noise, used by most code-made sounds
   noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
   const nd = noiseBuf.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
+
   buildAmbient();
 }
+
 
 function buildAmbient() {
   const len = Math.floor(ac.sampleRate * 6);
@@ -82,6 +119,7 @@ function buildAmbient() {
   wind.connect(wlp); wlp.connect(windGain); windGain.connect(ambBus);
   wind.start(); wl.start();
 
+
   // sea waves: noise with a slow swell
   const sb = ac.createBuffer(1, len, ac.sampleRate);
   const sd = sb.getChannelData(0);
@@ -96,6 +134,7 @@ function buildAmbient() {
   sr.start(); sl.start();
 }
 
+
 function loadGun() {
   fetch(GUN_URL)
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
@@ -104,6 +143,7 @@ function loadGun() {
     .catch(e => console.warn('[sound] gunshot.mp3 not loaded, using a made sound instead:', e.message || e));
 }
 
+
 // ---------- small building blocks ----------
 function panDest(pan) {
   if (!pan || !ac.createStereoPanner) return sfxBus;
@@ -111,6 +151,7 @@ function panDest(pan) {
   p.connect(sfxBus);
   return p;
 }
+
 
 function noise(dur, freq, gain, type, delay, dest) {
   const t = ac.currentTime + (delay || 0);
@@ -123,6 +164,7 @@ function noise(dur, freq, gain, type, delay, dest) {
   s.start(t, Math.random() * 1.4); s.stop(t + dur + 0.03);
 }
 
+
 function tone(freq, dur, gain, type, slideTo, delay, dest) {
   const t = ac.currentTime + (delay || 0);
   const o = ac.createOscillator(); o.type = type || 'sine';
@@ -134,6 +176,7 @@ function tone(freq, dur, gain, type, slideTo, delay, dest) {
   o.connect(g); g.connect(dest || sfxBus);
   o.start(t); o.stop(t + dur + 0.03);
 }
+
 
 // where is a world point, relative to the player? returns { d, pan }
 function where(x, z) {
@@ -148,6 +191,7 @@ function where(x, z) {
   return { d, pan };
 }
 
+
 // ---------- gunshots ----------
 function playGun(kind, x, z) {
   if (!ac || ac.state !== 'running') return;
@@ -160,18 +204,22 @@ function playGun(kind, x, z) {
   }
   if (voices >= MAX_VOICES) return;
 
+
   const v = Math.max(0, 1 - d / MAX_DIST);
   const level = g.vol * (0.3 + 0.7 * v) * (0.92 + Math.random() * 0.16);
   const cutoff = 1200 + v * v * 16000;                          // far = muffled
 
+
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff;
   lp.connect(panDest(pan));
+
 
   if (!gunBuf) {                                                // fallback if the file is missing
     noise(0.14, cutoff, level, 'lowpass', 0, lp);
     tone(140, 0.12, level * 0.6, 'sine', 50, 0, lp);
     return;
   }
+
 
   const t = ac.currentTime;
   const rate = g.rate * (1 + (Math.random() * 2 - 1) * GUN_VARIATION);
@@ -190,6 +238,7 @@ function playGun(kind, x, z) {
   play(rate, level, 0);
   if (g.layer > 0) play(rate * 0.7, level * g.layer, 0.012);
 }
+
 
 // ---------- code-made sounds ----------
 const SOUNDS = {
@@ -241,11 +290,13 @@ const SOUNDS = {
   }
 };
 
+
 function sfx(name, o) {
   if (!ac || ac.state !== 'running') return;
   const f = SOUNDS[name];
   if (f) f(o || {});
 }
+
 
 // ---------- gunfire of other people (no edits to their files) ----------
 // enemies and base guards: wrap their char.fire() so every shot makes a sound
@@ -263,20 +314,25 @@ function hookFire(o, kind) {
   } catch (e) { /* ignore */ }
 }
 
+
 // soldiers: char.fire() only restarts the animation every 0.5 s, so watch fireT instead.
 // (fireT jumps up to the weapon rate after a shot; REACT sets exactly 0.35, which is skipped)
+// Soldiers hidden inside the truck are skipped (the truck holds their fireT at 1).
 function watchSoldiers() {
   let fresh = 0;
   for (const s of getSoldiers()) {
     if (!s._snd) { s._snd = true; fresh++; }
     const ft = s.fireT;
-    if (!s.dead && s._sf !== undefined && ft > s._sf + 0.05 && Math.abs(ft - 0.35) > 1e-6) {
+    const grp = s.char && s.char.group;
+    const riding = !!(grp && grp.visible === false);
+    if (!riding && !s.dead && s._sf !== undefined && ft > s._sf + 0.05 && Math.abs(ft - 0.35) > 1e-6) {
       playGun(s.weapon === 'shotgun' ? 'shotgun' : (s.weapon === 'rifle' ? 'rifle' : 'pistol'), s.x, s.z);
     }
     s._sf = ft;
   }
   if (fresh > 0 && fresh <= 2) sfx('ready');     // a trained soldier appeared
 }
+
 
 // ---------- ambience ----------
 function updateSea(p) {
@@ -291,6 +347,7 @@ function updateSea(p) {
   sea = water / total;
 }
 
+
 // ============================================================
 // extras.js hooks
 // ============================================================
@@ -300,17 +357,28 @@ export function init(c) {
   loadGun();
   import('./base-npcs.js').then(m => { guardsFn = m.getBaseGuards; }).catch(() => { /* no crew file: fine */ });
 
+
   const wake = () => { if (ac && ac.state === 'suspended') ac.resume().catch(() => {}); };
   ['pointerdown', 'keydown', 'click'].forEach(ev => window.addEventListener(ev, wake, true));
   document.addEventListener('pointerlockchange', wake);
+
+
+  // the Settings screen tells us when the master volume changes
+  window.addEventListener('nova-volume', (e) => {
+    const m = e && e.detail ? parseFloat(e.detail.master) : NaN;
+    userMaster = isNaN(m) ? readMaster() : clamp(m, 0, 1);
+    applyMaster(true);
+  });
+
 
   // Console test:  testSound('hurt')  testSound('gun','rifle')
   window.testSound = (name, kind) => {
     if (name === 'gun') playGun(kind || 'rifle'); else sfx(name);
   };
   initDone = true;
-  console.log('[sound] ready (wind, sea, gunfire). Try testSound("hurt") in the Console.');
+  console.log('[sound] v2 ready (wind, sea, gunfire), master volume ' + userMaster.toFixed(2) + '. Try testSound("hurt") in the Console.');
 }
+
 
 export function update(dt, c) {
   if (!initDone) return;
@@ -320,10 +388,12 @@ export function update(dt, c) {
   ambBus.gain.setTargetAtTime(active ? VOL.amb : 0, ac.currentTime, 0.4);
   if (!active || ac.state !== 'running') return;
 
+
   // other people's gunfire
   for (const e of getEnemies()) hookFire(e, 'enemyShot');
   if (guardsFn) { try { for (const n of guardsFn()) hookFire(n, 'guardShot'); } catch (e) { guardsFn = null; } }
   watchSoldiers();
+
 
   // ambience follows where you are
   seaT -= dt;
@@ -333,6 +403,7 @@ export function update(dt, c) {
   windGain.gain.setTargetAtTime(0.05 + high * 0.14, t, 0.6);
   seaGain.gain.setTargetAtTime(0.03 + sea * 0.26, t, 0.8);
 }
+
 
 export function onEvent(name, data) {
   if (!initDone) return;
@@ -355,6 +426,7 @@ export function onEvent(name, data) {
     default: break;
   }
 }
+
 
 export function reset() {
   voices = 0;

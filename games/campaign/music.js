@@ -1,5 +1,5 @@
 // ============================================================
-//  NOVA STRIKE 3D — Campaign: games/campaign/music.js  (v1)
+//  NOVA STRIKE 3D — Campaign: games/campaign/music.js  (v3)
 //  "Operation Port Town" soundtrack, built live in code
 //  (WebAudio): no audio files, 100% free.
 //
@@ -20,7 +20,18 @@
 //
 //  K = turn the music off / on (remembered).
 //  Console: testMusic(0.9) forces an intensity, testMusic() releases.
+//
+//  v2: follows the MUSIC volume saved in nova_settings (menu + Settings
+//      screen), live: window event 'nova-volume' {detail:{music}}.
+//      Door for the Settings screen: window.campaignMusic = { isOn(), set(on) }
+//
+//  v3: ENEMY DRONES and ROBOTS (mechs + turrets) now count as threats
+//      for the mood, just like the human Space Gang. A drone overhead
+//      or a mech walking at you makes the music tense up.
+//      (They are read from drones.js getDrones() and robots.js getRobots().)
 // ============================================================
+
+
 
 // ---------- knobs ----------
 const BASE_VOL = 0.5;            // overall music loudness (0 to 1)
@@ -35,6 +46,10 @@ const HOLD_AFTER_FIGHT = 10;     // seconds the music stays tense after a fight
 const AHEAD = 0.18;              // scheduling look-ahead (seconds)
 const STINGER_COOLDOWN = 30;     // seconds between "contact" hits
 const SAVE_KEY = 'campaign_music';
+const SETTINGS_KEY = 'nova_settings';
+const MUSIC_DEFAULT = 0.7;       // the menu's default music volume; at this value BASE_VOL is used as is
+
+
 
 // D minor loop. root = bass note (MIDI), pad = chord tones, arp = arpeggio tones
 const CHORDS = [
@@ -45,6 +60,8 @@ const CHORDS = [
 ];
 const TOMS = { 0: 1.0, 3: 0.7, 8: 0.9, 10: 0.7, 14: 0.8 };  // war-drum pattern (step: strength)
 
+
+
 // ---------- state ----------
 const AC = window.AudioContext || window.webkitAudioContext;
 let ac = null, bus = null, filt = null, dIn = null, noiseBuf = null, timer = 0;
@@ -54,12 +71,30 @@ let holdT = 0, holdLevel = 0, stingT = 0;
 let dead = false, playingNow = false, forced = null;
 let muted = false;
 let toast = null, toastT = 0;
+let userMusic = MUSIC_DEFAULT;
+let getDronesFn = null, getRobotsFn = null;     // v3: drones and robots
 try { muted = localStorage.getItem(SAVE_KEY) === 'off'; } catch (e) { /* ignore */ }
+
+
 
 // ---------- small helpers ----------
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 const sm = (x, a, b) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const stepDur = () => 60 / (BPM_LOW + (BPM_HIGH - BPM_LOW) * inten) / 4;   // one 16th note
+
+
+
+// music volume saved by the menu / Settings screen (0 to 1)
+function readMusic() {
+  try {
+    const o = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const m = parseFloat(o.music);
+    return isNaN(m) ? MUSIC_DEFAULT : Math.max(0, Math.min(1, m));
+  } catch (e) { return MUSIC_DEFAULT; }
+}
+userMusic = readMusic();
+
+
 
 // ---------- building blocks ----------
 // One musical tone with a smooth volume shape.
@@ -96,6 +131,8 @@ function tone(o) {
   osc.onended = () => { try { g.disconnect(); } catch (e) { /* ignore */ } };
 }
 
+
+
 // A burst of noise (snare, hi-hat, crash)
 function hit(o) {
   const src = ac.createBufferSource();
@@ -112,6 +149,8 @@ function hit(o) {
   src.onended = () => { try { g.disconnect(); } catch (e) { /* ignore */ } };
 }
 
+
+
 function kick(t, v, f0, f1, dur) {
   tone({ type: 'sine', f: f0, to: f1, t, dur, v, a: 0.003, r: 0.02, decay: true });
 }
@@ -119,6 +158,8 @@ function snare(t, v) {
   hit({ t, dur: 0.15, v, ft: 'bandpass', fq: 2000, q: 0.8 });
   tone({ type: 'triangle', f: 200, to: 120, t, dur: 0.08, v: v * 0.6, a: 0.002, r: 0.02, decay: true });
 }
+
+
 
 // Big low "contact" hit when a fight starts
 function stinger() {
@@ -133,9 +174,13 @@ function tryStinger(from, to) {
   if (to >= 0.6 && from < 0.4 && stingT <= 0) { stinger(); stingT = STINGER_COOLDOWN; }
 }
 
+
+
 // ---------- the music itself: one 16th-note step ----------
 function playStep(st, br, t) {
   const sd = stepDur(), barDur = sd * 16, I = inten, ch = CHORDS[br];
+
+
 
   // YOU DIED: only a low, slow drone
   if (dead) {
@@ -145,6 +190,8 @@ function playStep(st, br, t) {
     }
     return;
   }
+
+
 
   // -- once per bar: drone, pad, strings --
   if (st === 0) {
@@ -171,11 +218,15 @@ function playStep(st, br, t) {
     }
   }
 
+
+
   // -- heartbeat at the base, steady kick when it gets serious --
   const kq = sm(I, 0.4, 0.55);
   if (st === 0) kick(t, 0.3 * (0.6 + 0.4 * I), 80, 38, 0.28);
   else if (st === 3 && kq < 0.6) { const v = 0.16 * (1 - kq); if (v > 0.01) kick(t, v, 70, 36, 0.22); }
   else if ((st === 4 || st === 8 || st === 12) && kq > 0.02) kick(t, 0.3 * kq, 80, 38, 0.26);
+
+
 
   // -- marching snare --
   const fs2 = sm(I, 0.15, 0.3);
@@ -184,11 +235,15 @@ function playStep(st, br, t) {
     else if (st === 7 || st === 15) snare(t, 0.07 * fs2);
   }
 
+
+
   // -- war drums --
   const ft = sm(I, 0.4, 0.55);
   if (ft > 0.02 && TOMS[st]) {
     kick(t, 0.28 * ft * TOMS[st], st % 2 ? 90 : 120, st % 2 ? 50 : 62, 0.3);
   }
+
+
 
   // -- driving bass pulse --
   const bp = sm(I, 0.5, 0.65);
@@ -198,16 +253,22 @@ function playStep(st, br, t) {
            v: 0.1 * bp * (st === 0 ? 1.3 : 1), fq: 220 + I * 600 });
   }
 
+
+
   // -- hi-hats --
   const hp = sm(I, 0.55, 0.7), h16 = sm(I, 0.8, 0.9);
   if (hp > 0.02 && st % 4 === 2) hit({ t, dur: 0.05, v: 0.05 * hp, fq: 7500 });
   if (h16 > 0.02 && st % 2 === 1) hit({ t, dur: 0.04, v: 0.03 * h16, fq: 7500 });
+
+
 
   // -- fast arpeggio --
   const ap = sm(I, 0.75, 0.9);
   if (ap > 0.02) {
     tone({ type: 'square', f: mtof(ch.arp[st % 4] + 12), t, dur: sd * 0.9, a: 0.005, r: 0.03, v: 0.02 * ap, fq: 2400 });
   }
+
+
 
   // -- faint radar ping when it is calm --
   if (I < 0.5 && st === 8 && br % 2 === 1 && Math.random() < 0.75) {
@@ -216,6 +277,8 @@ function playStep(st, br, t) {
     tone({ type: 'sine', f: mtof(86), t: t + 0.14, dur: 0.05, a: 0.004, r: 0.15, v: 0.03 * g, send: 0.6 });
   }
 }
+
+
 
 // ---------- scheduler (runs by timer, so it stays smooth) ----------
 function tick() {
@@ -229,6 +292,8 @@ function tick() {
   }
 }
 
+
+
 // ---------- audio start (browsers need a click first) ----------
 function build() {
   if (ac || !AC) return;
@@ -239,6 +304,8 @@ function build() {
   comp.threshold.value = -16; comp.ratio.value = 5;
   bus.connect(filt); filt.connect(comp); comp.connect(ac.destination);
 
+
+
   // echo for the radar ping
   dIn = ac.createGain();
   const dl = ac.createDelay(1); dl.delayTime.value = 0.36;
@@ -246,14 +313,18 @@ function build() {
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
   dIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(filt);
 
+
+
   // shared noise
   const n = ac.sampleRate;
   noiseBuf = ac.createBuffer(1, n, ac.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
 
+
+
   timer = setInterval(tick, 25);
-  console.log('[music] ready (code-made, D minor). K = music on/off. Console: testMusic(0.9)');
+  console.log('[music] v3 ready (code-made, D minor), music volume ' + userMusic.toFixed(2) + '. K = music on/off. Console: testMusic(0.9)');
 }
 function unlock() {
   if (!AC) return;
@@ -261,15 +332,30 @@ function unlock() {
   if (ac && ac.state === 'suspended') ac.resume();
 }
 
+
+
+// ---------- threats: humans + drones + robots (v3) ----------
+function listOf(fn) {
+  if (!fn) return [];
+  try { return fn() || []; } catch (e) { return []; }
+}
+// calls fn(thing, isHuman) for every living threat
+function eachThreat(c, fn) {
+  for (const e of c.getEnemies()) if (e && !e.dead) fn(e, true);
+  for (const e of listOf(getDronesFn)) if (e && !e.dead) fn(e, false);
+  for (const e of listOf(getRobotsFn)) if (e && !e.dead) fn(e, false);
+}
+
+
+
 // ---------- intensity ----------
 function nearestEnemy(c, limit) {
   const p = c.player;
   let best = 1e9;
-  for (const e of c.getEnemies()) {
-    if (e.dead) continue;
+  eachThreat(c, (e) => {
     const d = Math.hypot(e.x - p.x, e.z - p.z);
     if (d < best) best = d;
-  }
+  });
   return best < limit ? best : 1e9;
 }
 function computeTarget(c, playing) {
@@ -280,19 +366,22 @@ function computeTarget(c, playing) {
   const dTown = Math.hypot(p.x - TOWN.x, p.z - TOWN.z);
   if (dTown < IN_TOWN) t = 0.34; else if (dTown < NEAR_TOWN) t = 0.22;
 
+
+
   let nearest = 1e9, fight = false, search = false;
-  for (const e of c.getEnemies()) {
-    if (e.dead) continue;
+  eachThreat(c, (e, human) => {
     const d = Math.hypot(e.x - p.x, e.z - p.z);
     if (d < nearest) nearest = d;
     if (d < 70 && e.state === 'fight') fight = true;
-    if (d < 60 && e.state === 'search') search = true;
-  }
+    if (human && d < 60 && e.state === 'search') search = true;
+  });
   if (nearest < 110) t = Math.max(t, 0.42);
   if (nearest < 70) t = Math.max(t, 0.55);
   if (nearest < 40) t = Math.max(t, 0.7);
   if (search) t = Math.max(t, 0.7);
   if (fight) t = Math.max(t, 0.9);
+
+
 
   if (holdT > 0) t = Math.max(t, holdLevel);
   return t;
@@ -305,6 +394,8 @@ function hold(level, sec) {
   tryStinger(inten, level);
   inten = Math.max(inten, level - 0.2);
 }
+
+
 
 // ---------- small on/off message ----------
 function showToast(text) {
@@ -319,6 +410,8 @@ function showToast(text) {
   toastT = 1.8;
 }
 
+
+
 // ---------- hooks used by extras.js ----------
 export function init(c) {
   const events = ['pointerdown', 'keydown', 'click'];
@@ -332,7 +425,39 @@ export function init(c) {
     forced = (typeof v === 'number') ? Math.max(0, Math.min(1, v)) : null;
     console.log(forced === null ? '[music] intensity is automatic again' : '[music] intensity forced to ' + forced);
   };
+
+
+
+  // the Settings screen tells us when the music volume changes
+  window.addEventListener('nova-volume', (e) => {
+    const m = e && e.detail ? parseFloat(e.detail.music) : NaN;
+    if (!isNaN(m)) { userMusic = Math.max(0, Math.min(1, m)); senseT = 0; }
+  });
+
+
+
+  // door for the Settings screen (same switch as the K key)
+  window.campaignMusic = {
+    isOn: () => !muted,
+    set: (on) => {
+      muted = !on;
+      try { localStorage.setItem(SAVE_KEY, muted ? 'off' : 'on'); } catch (e) { /* ignore */ }
+      senseT = 0;
+    }
+  };
+
+
+
+  // v3: find the drones and the robots (same files the radar and the HUD use)
+  const pd = import('./drones.js').then(m => { getDronesFn = m.getDrones || null; }).catch(() => {});
+  const pr = import('./robots.js').then(m => { getRobotsFn = m.getRobots || null; }).catch(() => {});
+  Promise.all([pd, pr]).then(() => {
+    console.log('[music] threats: humans yes, drones ' + (getDronesFn ? 'yes' : 'no') +
+                ', robots ' + (getRobotsFn ? 'yes' : 'no'));
+  });
 }
+
+
 
 export function update(dt, c) {
   if (toast) {
@@ -345,22 +470,28 @@ export function update(dt, c) {
   holdT -= dt; stingT -= dt; senseT -= dt;
   if (!playingNow && forced === null) { holdT = 0; }
 
+
+
   if (senseT <= 0) {
     senseT = 0.25;
     target = computeTarget(c, playingNow);
     tryStinger(inten, target);
     lastSense = target;
     // loudness and brightness follow the mood
-    const vol = muted ? 0 : BASE_VOL * (dead ? 0.7 : ((playingNow || forced !== null) ? 1 : MENU_VOL));
+    const vol = muted ? 0 : BASE_VOL * (userMusic / MUSIC_DEFAULT) * (dead ? 0.7 : ((playingNow || forced !== null) ? 1 : MENU_VOL));
     const now = ac.currentTime;
     bus.gain.setTargetAtTime(Math.max(0.0001, vol), now, 0.4);
     filt.frequency.setTargetAtTime(dead ? 500 : 1500 + inten * 7500, now, 0.3);
   }
 
+
+
   const rate = target > inten ? RISE : FALL;
   const diff = target - inten;
   inten += Math.max(-rate * dt, Math.min(rate * dt, diff));
 }
+
+
 
 export function onKey(code) {
   if (code !== 'KeyK') return false;
@@ -371,6 +502,8 @@ export function onKey(code) {
   showToast(muted ? '♪ MUSIC OFF  (K)' : '♪ MUSIC ON  (K)');
   return true;
 }
+
+
 
 export function onEvent(name, data, c) {
   switch (name) {
@@ -394,6 +527,8 @@ export function onEvent(name, data, c) {
       break;
   }
 }
+
+
 
 export function reset() {
   dead = false; inten = 0; target = 0; holdT = 0; holdLevel = 0;
