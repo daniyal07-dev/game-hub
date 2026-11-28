@@ -1,5 +1,5 @@
 // ============================================================
-// intro.js  (v2)  ->  games/campaign/intro.js
+// intro.js  (v3)  ->  games/campaign/intro.js
 // Opening cinematic of Operation Port Town (plays after ENTER ISLAND):
 //   1. fade in, camera high above the island, descends onto Port Town
 //      "PORT TOWN HAS FALLEN"
@@ -15,10 +15,10 @@
 //  - Tells missions.js through extrasEvent('intro', {active}) so the mission clock and radio
 //    wait until it is over.
 //
-// v2: RAIN FIX. The rain follows the player, who is parked away from the cinema camera.
-//     The intro now moves the rain box to the cinema camera every frame (and makes it bigger
-//     when the camera is high), so the whole flight is rainy. Needs weather.js v4.
-//     New story shots, beacons with labels, route line. Text size adapts to small screens.
+// v3: NO RAIN IN THE INTRO. The rain is hidden during the whole cinematic and
+//     switched back on when the intro ends or is skipped (the storm look, sky and
+//     thunder are untouched). Set HIDE_RAIN = false to get the rain back in the intro.
+//     Story shots, beacons, labels and the route line are the same as v2.
 //
 // Loaded by extras.js (add 'intro' LAST in MODULES). Safe to delete.
 // Console:  introPlay()   (play it again)
@@ -29,8 +29,10 @@ import { extrasEvent } from './extras.js';
 
 
 
+
 // ---------- knobs ----------
 const ENABLED = true;             // false = no intro at all
+const HIDE_RAIN = true;           // true = dry intro, rain returns when it ends
 const T_DESCENT = 6;              // seconds: descent over the town
 const T_BASE = 5;                 // seconds: flight to the base
 const T_BARRACKS = 4.5;           // seconds: the Barracks
@@ -43,12 +45,6 @@ const BAR_H = '13vh';             // height of the cinema bars
 const LAND_ARC = 12;              // extra height in the middle of the landing (m)
 const MIN_AGL = 2.5;              // the camera never goes lower than this above the ground (m)
 
-// rain in the intro
-const RAIN_SCALE_MAX = 3.5;       // biggest rain box (x) when the camera is high
-const RAIN_HIGH_START = 8;        // metres above ground where the box starts to grow
-const RAIN_HIGH_STEP = 10;        // every this many metres more = +1x
-const RAIN_AHEAD = 0.5;           // how far the big box moves ahead of the view
-const RAIN_ALPHA_BOOST = 0.8;     // extra rain visibility when high (0 = none)
 
 // places (x, z)
 const PARK = { x: 120, z: 215 };              // where the player waits (south of the town, out of sight)
@@ -56,15 +52,18 @@ const BARRACKS = { x: -162, z: -89.5 };       // between Barracks A and B
 const TRUCK = { x: SPAWN.x + 9, z: SPAWN.z + 7 };
 const TOWN = { x: 120, z: 80 };
 
+
 const CAM_A = { x: 150, y: 190, z: 200 };     // start: high up
 const LOOK_A = { x: 120, z: 90, dy: 0 };
 const CAM_B = { x: 122, y: 26, z: 128 };      // end of descent: just south of the town
 const LOOK_B = { x: 120, z: 60, dy: 9 };      // the Town Hall and its flags
 
 
+
 const HIDE = ['#hud', '#crosshair', '#train-supply', '#train-box',
               '#guide-objective', '#guide-lock', '#guide-briefing',
               '[id*="mini"]', '[id*="map"]'];
+
 
 
 const TEXTS = {
@@ -76,6 +75,7 @@ const TEXTS = {
   b:        { t: 'OPERATION PORT TOWN', s: 'Train an army. Take the town back.', c: '#40e0ff' }
 };
 
+
 // the story legs after the descent: pose i -> pose i+1, the last leg is the landing
 const LEGS = [
   { dur: T_BASE, text: 'base' },
@@ -84,6 +84,7 @@ const LEGS = [
   { dur: T_ROUTE, text: 'route' },
   { dur: T_LAND, text: 'b' }
 ];
+
 
 
 
@@ -97,11 +98,12 @@ let curText = null, boomed = false, swept = false;
 let hidden = [], kids = [];
 let leg = -1, legF = 0, lastLeg = -1;
 let POSES = [], markers = [], route = null, routeCount = 0, routeTex = null;
-let rainObj = null, rainAlpha0 = null;
+let rainObj = null, rainWas = true, rainHidden = false;
 const dummy = new THREE.PerspectiveCamera();
 const qLand = new THREE.Quaternion(), qEnd = new THREE.Quaternion();
 const eul = new THREE.Euler(0, 0, 0, 'YXZ');
-const tmpV = new THREE.Vector3(), tmpD = new THREE.Vector3();
+const tmpV = new THREE.Vector3();
+
 
 
 
@@ -109,6 +111,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, f) => a + (b - a) * f;
 const smooth = f => { f = clamp(f, 0, 1); return f * f * (3 - 2 * f); };
 const lookY = L => heightAt(L.x, L.z) + L.dy;
+
 
 
 
@@ -147,6 +150,7 @@ const ping = () => { tone(740, 0, 0.25, 0.05, 'sine'); tone(988, 0.12, 0.3, 0.04
 
 
 
+
 // ---------- screen elements ----------
 function ensureDom() {
   if (!root) {
@@ -178,6 +182,7 @@ function ensureDom() {
 
 
 
+
 function setText(key) {
   if (key === curText) return;
   curText = key;
@@ -193,6 +198,7 @@ function setText(key) {
 
 
 
+
 function hideGameUi(c) {
   hidden = [];
   for (const sel of HIDE) {
@@ -202,6 +208,7 @@ function hideGameUi(c) {
   }
   kids = c.camera.children.map(k => [k, k.visible]);
 }
+
 
 
 
@@ -216,6 +223,31 @@ function showGameUi() {
 
 
 
+
+// ---------- rain: hidden while the intro plays ----------
+function hideRain(c) {
+  if (!HIDE_RAIN) return;
+  const scene = c.scene;
+  if (!scene) return;
+  if (!rainObj || !rainObj.parent) {
+    rainObj = scene.children.find(o => o.isLineSegments && o.material && o.material.uniforms &&
+                                       o.material.uniforms.uCam) || null;
+    rainHidden = false;
+  }
+  if (!rainObj) return;
+  if (!rainHidden) { rainWas = rainObj.visible; rainHidden = true; }
+  rainObj.visible = false;                       // weather.js runs before us, so we switch it off again every frame
+}
+
+
+function showRain() {
+  if (rainObj && rainHidden) rainObj.visible = rainWas;
+  rainHidden = false;
+}
+
+
+
+
 // ---------- camera poses ----------
 function pose(x, h, z, lx, ldy, lz) {
   return {
@@ -223,6 +255,7 @@ function pose(x, h, z, lx, ldy, lz) {
     look: new THREE.Vector3(lx, heightAt(lx, lz) + ldy, lz)
   };
 }
+
 
 function buildPoses() {
   const dx = TOWN.x - TRUCK.x, dz = TOWN.z - TRUCK.z, d = Math.hypot(dx, dz) || 1;
@@ -241,6 +274,7 @@ function buildPoses() {
   dummy.lookAt(last.look);
   qLand.copy(dummy.quaternion);
 }
+
 
 
 
@@ -267,6 +301,7 @@ function makeMarker(id, x, z, color, radius, labelText, labelH, show) {
   g.visible = false;
   scene.add(g);
 
+
   const hex = '#' + new THREE.Color(color).getHexString();
   const el = document.createElement('div');
   el.textContent = labelText;
@@ -276,8 +311,10 @@ function makeMarker(id, x, z, color, radius, labelText, labelH, show) {
     'transform:translate(-50%,-100%);';
   root.appendChild(el);
 
+
   markers.push({ id, g, beam, ring, beamMat, ringMat, el, show, wx: x, wy: gy + labelH, wz: z });
 }
+
 
 function makeRoute() {
   const dx = TOWN.x - TRUCK.x, dz = TOWN.z - TRUCK.z, d = Math.hypot(dx, dz) || 1;
@@ -313,6 +350,7 @@ function makeRoute() {
   ctx.scene.add(route);
 }
 
+
 function buildEffects() {
   removeEffects();
   makeMarker('barracks', BARRACKS.x, BARRACKS.z, 0xffd24a, 9, 'BARRACKS · TRAIN SOLDIERS', 16,
@@ -323,6 +361,7 @@ function buildEffects() {
     () => (leg === 3 && legF > 0.5) || (leg === 4 && legF < 0.6));
   makeRoute();
 }
+
 
 function removeEffects() {
   for (const m of markers) {
@@ -340,10 +379,12 @@ function removeEffects() {
   if (routeTex) { routeTex.dispose(); routeTex = null; }
 }
 
+
 function hideEffects() {
   for (const m of markers) { m.g.visible = false; m.el.style.display = 'none'; }
   if (route) route.visible = false;
 }
+
 
 function updateEffects(c) {
   const cam = c.camera;
@@ -373,48 +414,6 @@ function updateEffects(c) {
 
 
 
-// ---------- rain follows the cinema camera ----------
-function fixRain(c) {
-  const scene = c.scene;
-  if (!scene) return;
-  if (!rainObj || !rainObj.parent) {
-    rainObj = scene.children.find(o => o.isLineSegments && o.material && o.material.uniforms &&
-                                       o.material.uniforms.uCam) || null;
-    rainAlpha0 = null;
-  }
-  if (!rainObj || !rainObj.visible) return;      // no rain now (Clear / Cloudy)
-  const u = rainObj.material.uniforms, cam = c.camera;
-  if (rainAlpha0 === null && u.uAlpha) rainAlpha0 = u.uAlpha.value;
-
-  u.uCam.value.copy(cam.position);
-  if (!u.uScale || !u.uBox || !u.uLen) return;   // old weather.js: only the position is fixed
-
-  const alt = cam.position.y - (heightAt(cam.position.x, cam.position.z) || 0);
-  const s = clamp(1 + (alt - RAIN_HIGH_START) / RAIN_HIGH_STEP, 1, RAIN_SCALE_MAX);
-  const t = (s - 1) / (RAIN_SCALE_MAX - 1);
-  u.uScale.value = s;
-  u.uBox.value.multiplyScalar(s);                // weather.js writes the normal size again every frame
-  u.uLen.value *= s;
-  if (u.uAlpha && rainAlpha0 !== null) u.uAlpha.value = rainAlpha0 * (1 + RAIN_ALPHA_BOOST * t);
-  if (s > 1.01) {
-    cam.getWorldDirection(tmpD);
-    tmpD.y = 0;
-    if (tmpD.lengthSq() > 0.0001) {
-      tmpD.normalize();
-      const ahead = t * (u.uBox.value.x * 0.5) * RAIN_AHEAD;
-      u.uCam.value.x += tmpD.x * ahead;
-      u.uCam.value.z += tmpD.z * ahead;
-    }
-  }
-}
-
-function restoreRain() {
-  if (rainObj && rainObj.material && rainObj.material.uniforms && rainObj.material.uniforms.uAlpha && rainAlpha0 !== null) {
-    rainObj.material.uniforms.uAlpha.value = rainAlpha0;
-  }
-}
-
-
 
 // ---------- start and end ----------
 function begin(c) {
@@ -432,9 +431,11 @@ function begin(c) {
   leg = -1; legF = 0; lastLeg = -1;
   hintEl.style.opacity = '0';
   state = 'run';
+  hideRain(c);
   extrasEvent('intro', { active: true });
-  console.log('[intro] v2 playing. SPACE or ENTER skips it');
+  console.log('[intro] v3 playing (dry, no rain). SPACE or ENTER skips it');
 }
+
 
 
 
@@ -446,20 +447,22 @@ function finish(c) {
   showGameUi();
   setText(null);
   removeEffects();
-  restoreRain();
+  showRain();
   root.style.display = 'none';
   topBar.style.height = '0'; botBar.style.height = '0';
   extrasEvent('intro', { active: false });
   if (fadeV > 0.01) { fadeGoal = 0; fadeSpeed = 2.2; state = 'out'; }
   else { removeFade(); state = 'done'; }
-  console.log('[intro] finished');
+  console.log('[intro] finished (rain is back)');
 }
+
 
 
 
 function removeFade() {
   if (fadeEl) { fadeEl.remove(); fadeEl = null; }
 }
+
 
 
 
@@ -472,9 +475,11 @@ function tickFade(dt) {
 
 
 
+
 // ---------- camera path ----------
 function placeCamera(c) {
   const cam = c.camera, p = c.player;
+
 
   // 0) descent over Port Town
   if (time < T_DESCENT) {
@@ -489,11 +494,13 @@ function placeCamera(c) {
     return false;
   }
 
+
   // which story leg are we in?
   let t = time - T_DESCENT, i = 0;
   while (i < LEGS.length - 1 && t >= LEGS[i].dur) { t -= LEGS[i].dur; i++; }
   const g = clamp(t / LEGS[i].dur, 0, 1);
   leg = i; legF = g;
+
 
   // 1..4) pose i -> pose i+1
   if (i < LEGS.length - 1) {
@@ -507,6 +514,7 @@ function placeCamera(c) {
     cam.quaternion.copy(dummy.quaternion);
     return false;
   }
+
 
   // 5) landing in the player's eyes
   const f = smooth(g);
@@ -523,14 +531,16 @@ function placeCamera(c) {
 
 
 
+
 // ============================================================
 // extras.js hooks
 // ============================================================
 export function init(c) {
   ctx = c;
   if (!ENABLED) return;
-  console.log('[intro] v2 ready (plays when you press ENTER ISLAND). Console: introPlay()');
+  console.log('[intro] v3 ready (dry intro, plays when you press ENTER ISLAND). Console: introPlay()');
 }
+
 
 
 
@@ -542,6 +552,7 @@ export function update(dt, c) {
 
 
 
+
   if (state === 'out') {
     tickFade(dt);
     if (fadeV <= 0) { removeFade(); state = 'done'; }
@@ -550,10 +561,12 @@ export function update(dt, c) {
 
 
 
+
   if (state === 'wait') {
     if (!c.isPlaying() || !c.isReady() || p.dead) return;
     begin(c);
   }
+
 
 
 
@@ -565,8 +578,10 @@ export function update(dt, c) {
 
 
 
+
   time += dt;
   tickFade(dt);
+
 
 
 
@@ -579,9 +594,11 @@ export function update(dt, c) {
 
 
 
+
   const ended = placeCamera(c);
   updateEffects(c);
-  fixRain(c);                                   // rain around the cinema camera, not around the parked player
+  hideRain(c);                                  // dry intro: no rain until the cinematic ends
+
 
 
 
@@ -589,10 +606,12 @@ export function update(dt, c) {
   if (!swept && time >= T_DESCENT) { swept = true; sweep(110, 460, 3.2, 0.06); }
   if (leg !== lastLeg) { lastLeg = leg; if (leg >= 1) ping(); }
 
+
   if (time >= 1.0 && time < T_DESCENT - 0.8) setText('a');
   else if (leg >= 0 && legF > 0.1 && legF < 0.9) setText(LEGS[leg].text);
   else setText(null);
   hintEl.style.opacity = (time >= SKIP_MIN && !skipping) ? '1' : '0';
+
 
 
 
@@ -602,6 +621,7 @@ export function update(dt, c) {
     finish(c);
   }
 }
+
 
 
 
@@ -616,9 +636,11 @@ export function onKey(code) {
 
 
 
+
 export function introActive() {
   return state === 'run';
 }
+
 
 
 
