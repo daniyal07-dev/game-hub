@@ -1,29 +1,37 @@
-// games/campaign/weather.js   (v3)
-// Campaign Mode: weather. The player picks it on the start card: Clear / Cloudy / Storm.
+// games/campaign/weather.js   (v4)
+// Campaign Mode: weather. Chosen in Settings: Clear / Cloudy / Storm.
 //   CLOUDY: grey dark sky, heavy fog, weak sun, moving clouds. No rain.
 //   STORM : darker, rain, wind, lightning flashes with thunder, rain sound (made by code).
 //   CLEAR : the normal bright day (exactly as before).
-// Default is CLOUDY (change DEFAULT below). The choice is saved on the device.
+// Default is STORM (change DEFAULT below). The choice is saved on the device.
 // Console:  setWeather('storm')   setWeather('cloudy')   setWeather('clear')
 //           weatherVolume(0.03, 0.4)   -> rain volume, thunder volume (try it live)
 //
 // v2: rain about 3x quieter and softer, thunder much lower.
 // v3: rain 3x quieter again (0.09 -> 0.03), thunder 0.8 -> 0.4, softer hiss (2600 Hz).
+// v4: default weather is STORM (the old saved choice is reset once).
+//     The rain box grows with the camera height (intro flyover) and moves ahead of the view,
+//     so the whole island is rainy in the intro, not only around the base.
 //
 // Does NOT edit main.js. It finds the sky, the lights and the fog in the scene by itself.
 // Rain is drawn on the graphics card (cheap), with fewer drops on phones.
 // Needs to be listed in extras.js MODULES (before 'intro').
 
 
+
 import * as THREE from 'three';
+import { heightAt } from './terrain.js';
+
 
 
 
 
 /* ---------- Knobs ---------- */
 const SAVE_KEY = 'campaign_weather';
-const DEFAULT = 'cloudy';                 // 'clear' | 'cloudy' | 'storm'
+const DEFAULT = 'storm';                  // 'clear' | 'cloudy' | 'storm'
+const DEFAULT_TAG = 'storm-v4';           // change this text to reset everybody's saved choice once
 const PHONE = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+
 
 
 const FADE_SECONDS = 2.0;                 // how long a weather change takes
@@ -35,6 +43,12 @@ const RAIN_LEN = 0.9;                     // streak length (m)
 const RAIN_ALPHA = 0.5;
 const RAIN_COLOR = [0.78, 0.85, 0.93];
 
+const RAIN_HIGH_START = 8;                // m above the ground where the rain box starts to grow
+const RAIN_HIGH_STEP = 10;                // every this many metres more = +1x box size
+const RAIN_SCALE_MAX = 5;                 // biggest box (x)
+const RAIN_AHEAD = 0.12;                  // how far the big box moves ahead of the view (x box width per +1x)
+
+
 
 const SOUND = true;                       // rain and thunder sound
 let RAIN_VOLUME = 0.03;                   // was 0.09, first version 0.28 (too loud)
@@ -44,6 +58,7 @@ const RAIN_HISS_MIN = 500;                // cuts the low rumble
 const BOLT_MIN = 7, BOLT_MAX = 16;        // seconds between lightning strikes
 const FLASH_AMBIENT = 1.6;                // how bright a lightning flash lights the world
 const FLASH_SKY = 0.5;
+
 
 
 
@@ -70,6 +85,7 @@ const ORDER = ['clear', 'cloudy', 'storm'];
 
 
 
+
 /* ---------- State ---------- */
 let scene = null, api = {};
 let ready = false;
@@ -82,9 +98,11 @@ const sunVec = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
 let baseFar = 850, baseNear = 60, lastFar = 850;
 let dome = null, domeTex = null;
-let rain = null, rainU = null, rainTime = 0;
+let rain = null, rainU = null, rainTime = 0, rainScale = 1;
+const fwd = new THREE.Vector3();
 let flash = 0, boltT = 8, bolts = [], thunders = [];
 let actx = null, noiseBuf = null, rainGain = null, master = 0.8, masterT = 0;
+
 
 
 
@@ -94,12 +112,14 @@ const NUM_KEYS = ['sunMul', 'hemiMul', 'ambMul', 'fogMul', 'fogNear', 'cloud', '
 const COL_KEYS = ['horizon', 'top', 'sunCol', 'hemiSky', 'cloudCol'];
 
 
+
 function makeSet() {
   const o = {};
   for (const k of NUM_KEYS) o[k] = 0;
   for (const k of COL_KEYS) o[k] = new THREE.Color();
   return o;
 }
+
 
 
 function fillTarget(out, w) {
@@ -117,12 +137,14 @@ function fillTarget(out, w) {
 }
 
 
+
 function readMaster() {
   try {
     const s = JSON.parse(localStorage.getItem('nova_settings') || '{}');
     if (typeof s.master === 'number') master = Math.max(0, Math.min(1, s.master));
   } catch (e) { /* ignore */ }
 }
+
 
 
 
@@ -164,6 +186,7 @@ function makeCloudTexture() {
 }
 
 
+
 function buildDome() {
   domeTex = makeCloudTexture();
   const mat = new THREE.MeshBasicMaterial({
@@ -176,6 +199,7 @@ function buildDome() {
   dome.renderOrder = -0.5;
   scene.add(dome);
 }
+
 
 
 
@@ -199,6 +223,7 @@ function buildRain() {
     uTime: { value: 0 },
     uCam: { value: new THREE.Vector3() },
     uBox: { value: new THREE.Vector3(RAIN_BOX_W, RAIN_BOX_H, RAIN_BOX_W) },
+    uScale: { value: 1 },
     uFall: { value: RAIN_FALL },
     uWind: { value: new THREE.Vector2(0, 0) },
     uLen: { value: RAIN_LEN },
@@ -209,11 +234,11 @@ function buildRain() {
     uniforms: rainU, transparent: true, depthWrite: false, fog: false,
     vertexShader: `
       uniform float uTime; uniform vec3 uCam; uniform vec3 uBox; uniform float uFall;
-      uniform vec2 uWind; uniform float uLen; uniform float uAlpha;
+      uniform vec2 uWind; uniform float uLen; uniform float uAlpha; uniform float uScale;
       attribute float aEnd;
       varying float vA;
       void main() {
-        vec3 p = position;
+        vec3 p = position * uScale;
         p.y -= uTime * uFall;
         p.x += uTime * uWind.x;
         p.z += uTime * uWind.y;
@@ -235,6 +260,7 @@ function buildRain() {
   rain.renderOrder = 4;
   scene.add(rain);
 }
+
 
 
 
@@ -261,6 +287,7 @@ function ensureAudio() {
 }
 
 
+
 function thunderSound(strength) {
   if (!actx || !noiseBuf) return;
   const t = actx.currentTime;
@@ -278,6 +305,7 @@ function thunderSound(strength) {
   src.connect(lp); lp.connect(g); g.connect(actx.destination);
   src.start(t); src.stop(t + 3.4);
 }
+
 
 
 
@@ -312,9 +340,11 @@ function buildCard() {
 }
 
 
+
 function markButtons() {
   document.querySelectorAll('#wx-box button').forEach((b) => b.classList.toggle('on', b.dataset.wx === name));
 }
+
 
 
 
@@ -335,6 +365,7 @@ export function setWeather(w, instant) {
 window.setWeather = (w) => setWeather(w);
 
 
+
 // Console: weatherVolume(0.03, 0.4)  -> rain, thunder.  No arguments = show the values.
 window.weatherVolume = (r, t) => {
   if (typeof r === 'number') RAIN_VOLUME = Math.max(0, r);
@@ -343,10 +374,12 @@ window.weatherVolume = (r, t) => {
 };
 
 
+
 function copySet(a, b) {
   for (const k of NUM_KEYS) a[k] = b[k];
   for (const k of COL_KEYS) a[k].copy(b[k]);
 }
+
 
 
 
@@ -358,12 +391,14 @@ export function init(ctx) {
   if (!scene) { console.warn('[weather] no scene, weather off'); return; }
 
 
+
   // find what main.js built (only direct children of the scene)
   const kids = scene.children;
   sky = kids.find((o) => o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTop) || null;
   sunLight = kids.find((o) => o.isDirectionalLight && o.castShadow) || kids.find((o) => o.isDirectionalLight) || null;
   hemiLight = kids.find((o) => o.isHemisphereLight) || null;
   ambLight = kids.find((o) => o.isAmbientLight) || null;
+
 
 
   base = {
@@ -389,9 +424,11 @@ export function init(ctx) {
   if (scene.fog) { baseFar = scene.fog.far; baseNear = scene.fog.near; lastFar = baseFar; }
 
 
+
   cur = makeSet(); tgt = makeSet();
   cur.cloudCol.set(0xb4bcc6);
   ready = true;
+
 
 
   buildDome();
@@ -400,9 +437,18 @@ export function init(ctx) {
   readMaster();
 
 
+
+  // v4: the new default (storm) wins once over an old saved choice, then the player's pick is remembered
   let saved = null;
-  try { saved = localStorage.getItem(SAVE_KEY); } catch (e) { /* ignore */ }
+  try {
+    if (localStorage.getItem(SAVE_KEY + '_def') !== DEFAULT_TAG) {
+      localStorage.setItem(SAVE_KEY + '_def', DEFAULT_TAG);
+      localStorage.removeItem(SAVE_KEY);
+    }
+    saved = localStorage.getItem(SAVE_KEY);
+  } catch (e) { /* ignore */ }
   setWeather(WEATHER[saved] ? saved : DEFAULT, true);
+
 
 
   // sound can only start after a click or tap
@@ -412,9 +458,11 @@ export function init(ctx) {
   window.addEventListener('campaign:playing', wake);
 
 
-  console.log('[weather] v3 ready: ' + name + (sky ? '' : ' (sky not found: fog only)') +
+
+  console.log('[weather] v4 ready: ' + name + (sky ? '' : ' (sky not found: fog only)') +
               (PHONE ? ' (phone: fewer drops)' : '') + ". Console: setWeather('storm')");
 }
+
 
 
 export function update(dt, ctx) {
@@ -424,6 +472,7 @@ export function update(dt, ctx) {
   const cam = c.camera || api.camera;
 
 
+
   // 1) glide towards the chosen weather
   const a = 1 - Math.exp(-dt / (FADE_SECONDS / 3));
   for (const k of NUM_KEYS) {
@@ -431,6 +480,7 @@ export function update(dt, ctx) {
     cur[k] = Math.abs(d) < 0.0005 ? tgt[k] : cur[k] + d * a;
   }
   for (const k of COL_KEYS) cur[k].lerp(tgt[k], a);
+
 
 
   // 2) lightning and thunder (storm only, only while playing)
@@ -456,6 +506,7 @@ export function update(dt, ctx) {
   if (flash < 0.002) flash = 0;
 
 
+
   // 3) apply to the world
   if (skyU) {
     skyU.uHorizon.value.copy(cur.horizon).addScalar(flash * FLASH_SKY);
@@ -478,6 +529,7 @@ export function update(dt, ctx) {
   }
 
 
+
   // clouds
   if (dome) {
     dome.visible = cur.cloud > 0.01;
@@ -490,6 +542,7 @@ export function update(dt, ctx) {
   }
 
 
+
   // rain
   if (rain) {
     const n = Math.floor(cur.rain * RAIN_DROPS);
@@ -498,10 +551,38 @@ export function update(dt, ctx) {
       rainTime += dt;
       rain.geometry.setDrawRange(0, n * 2);
       rainU.uTime.value = rainTime;
-      if (cam) rainU.uCam.value.copy(cam.position);
+
+      // the rain box grows with the height above the ground (intro flyover) and moves ahead of the view
+      let target = 1;
+      if (cam) {
+        let ground = 0;
+        try { ground = heightAt(cam.position.x, cam.position.z) || 0; } catch (e) { ground = 0; }
+        const alt = cam.position.y - ground;
+        target = Math.min(RAIN_SCALE_MAX, Math.max(1, 1 + (alt - RAIN_HIGH_START) / RAIN_HIGH_STEP));
+      }
+      rainScale += (target - rainScale) * Math.min(1, dt * 2.5);
+      if (Math.abs(rainScale - 1) < 0.01) rainScale = 1;
+      rainU.uScale.value = rainScale;
+      rainU.uBox.value.set(RAIN_BOX_W * rainScale, RAIN_BOX_H * rainScale, RAIN_BOX_W * rainScale);
+      rainU.uLen.value = RAIN_LEN * rainScale;
+
+      if (cam) {
+        rainU.uCam.value.copy(cam.position);
+        if (rainScale > 1.01) {
+          cam.getWorldDirection(fwd);
+          fwd.y = 0;
+          if (fwd.lengthSq() > 0.0001) {
+            fwd.normalize();
+            const ahead = (rainScale - 1) * RAIN_BOX_W * RAIN_AHEAD;
+            rainU.uCam.value.x += fwd.x * ahead;
+            rainU.uCam.value.z += fwd.z * ahead;
+          }
+        }
+      }
       rainU.uWind.value.set(cur.wind, cur.wind * 0.3);
     }
   }
+
 
 
   // rain sound
@@ -513,6 +594,7 @@ export function update(dt, ctx) {
     rainGain.gain.setTargetAtTime(v, actx.currentTime, 0.3);
   }
 }
+
 
 
 export function reset() {
