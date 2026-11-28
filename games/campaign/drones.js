@@ -1,11 +1,19 @@
-// games/campaign/drones.js  (v1)
+// games/campaign/drones.js  (v2)
 // Space Gang attack drones that guard Port Town (look copied from War: models/drone.glb + health ring).
 //  - Patrol over the town streets, never hover over buildings or trees (they use collision.js).
 //  - When they see the player, a soldier or a base guard they dive in, keep 9-16 m away, strafe and fire cyan bursts.
 //  - Real health: your rifle / pistol / shotgun work (the 'shot' event is ray-tested here, no player.js edit).
 //  - Your soldiers and the base guards shoot back at drones.
 //  - Own sounds: rotor hum, zap shots, explosion.  Own explosion effect.
-// Loaded by extras.js (needs 'drones' in MODULES).  Console: spawnDrone(), dronesInfo()
+//
+// v2: HITTING DRONES IS FAIRER.
+//   * Walls only block your bullet if the bullet is low (under WALL_H) at that spot,
+//     so shots fly over fences, sandbags and low roofs (v1 used a flat 2D check).
+//   * The hit sphere grows a little with distance (HIT_R + HIT_R_PER_M * metres, max HIT_R_MAX).
+//   * Console: droneDebug(true) prints why a shot did not hit (out of range / missed by X m / wall).
+//
+// Loaded by extras.js (needs 'drones' in MODULES).  Console: spawnDrone(), dronesInfo(), droneDebug(true)
+
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -14,6 +22,7 @@ import { hurtSoldier } from './units.js';
 import { getBaseGuards } from './base-npcs.js';
 import { difficultyName } from './enemies.js';
 import { extrasEvent } from './extras.js';
+
 
 /* ---------- Settings you can change ---------- */
 const COUNT        = 4;            // drones over the town
@@ -44,7 +53,10 @@ const GAP          = 0.18;
 const PAUSE        = 1.1;          // seconds between bursts
 const REACT        = 0.7;          // seconds before the first shot after spotting you
 const BODY_R       = 1.3;          // keeps this far from walls / trees
-const HIT_R        = 1.2;          // your bullets hit within this radius of the drone centre
+const HIT_R        = 1.3;          // your bullets hit within this radius of the drone centre (close up)
+const HIT_R_PER_M  = 0.008;        // the hit radius grows by this much per metre of distance
+const HIT_R_MAX    = 2.4;          // biggest hit radius (m)
+const WALL_H       = 3.5;          // your bullet is stopped by walls / trees only while it is lower than this (m)
 const ALLY_RANGE   = 38;           // soldiers / guards shoot a drone within this distance
 const ALLY_HIT     = 0.40;
 const ALLY_DMG     = 9;
@@ -56,6 +68,8 @@ const VOLUME       = 0.7;
 const MAX_DIST     = 110;          // sounds fade out at this distance
 const HUM_VOL      = 0.10;
 const MAX_TOTAL    = 8;            // with test drones
+let DEBUG          = false;        // true = Console tells why your shots miss drones (or droneDebug(true))
+
 
 const SHOTS = {                    // same numbers as your guns in player.js
   pistol:  { dmg: 28, range: 70,  pellets: 1, spread: 0 },
@@ -63,6 +77,7 @@ const SHOTS = {                    // same numbers as your guns in player.js
   shotgun: { dmg: 14, range: 35,  pellets: 8, spread: 0.04 }
 };
 const RING_COLORS = { 3: 0x00f0ff, 2: 0x7b2ff7, 1: 0xff2d95 };   // same as War
+
 
 /* ---------- State ---------- */
 let C = null, scene = null;
@@ -73,6 +88,7 @@ const targets = [];
 const camPos = new THREE.Vector3();
 const TP = { x: 0, y: 0, z: 0 };
 
+
 /* ---------- Small helpers ---------- */
 function angDiff(a, b) {
   let d = b - a;
@@ -82,12 +98,14 @@ function angDiff(a, b) {
 }
 const mats = (o) => (Array.isArray(o.material) ? o.material : [o.material]);
 
+
 function loadModel() {
   new GLTFLoader().load(MODEL_URL,
     (g) => { template = g.scene; loaded = true; console.log('[drones] drone.glb loaded'); },
     undefined,
     () => { loaded = true; console.warn('[drones] models/drone.glb not found, using a built-in shape'); });
 }
+
 
 // same look settings as War (STYLE_DRONE)
 function prepare(root) {
@@ -108,6 +126,7 @@ function prepare(root) {
   });
 }
 
+
 // scale so the biggest side = SIZE, centre it, long side along Z (same as War's fitModel)
 function fit(root) {
   const box = new THREE.Box3().setFromObject(root);
@@ -122,6 +141,7 @@ function fit(root) {
   outer.add(holder);
   return outer;
 }
+
 
 function glow(obj, color, intensity) {
   const c = new THREE.Color(color);
@@ -143,6 +163,7 @@ function unglow(obj) {
     });
   });
 }
+
 
 function buildMesh() {
   const g = new THREE.Group();
@@ -168,6 +189,7 @@ function buildMesh() {
   return { g, tilt, ring };
 }
 
+
 function look(d) {
   const f = d.hp / d.maxHp;
   const stage = f > 0.66 ? 3 : f > 0.33 ? 2 : 1;
@@ -177,6 +199,7 @@ function look(d) {
   else if (d.hp < d.maxHp) glow(d.tilt, col, 0.5);
   else unglow(d.tilt);
 }
+
 
 /* ---------- Beams (tracers) ---------- */
 const beams = [];
@@ -212,6 +235,7 @@ function updateBeams(dt) {
     else b.l.material.opacity = b.life / 0.1;
   }
 }
+
 
 /* ---------- Explosion effect ---------- */
 const fx = [];
@@ -268,6 +292,7 @@ function clearFx() {
   }
   fx.length = 0;
 }
+
 
 /* ---------- Sound (own small audio graph) ---------- */
 let AC = null, master = null, hum = null, noiseBuf = null;
@@ -366,6 +391,7 @@ function boomSound(x, y, z) {
   th.start(t); th.stop(t + 0.45);
 }
 
+
 /* ---------- Warning text ---------- */
 let warnEl = null;
 function warn(text) {
@@ -383,6 +409,7 @@ function warn(text) {
   setTimeout(() => { if (warnEl) warnEl.style.opacity = '0'; }, 2500);
 }
 
+
 /* ---------- Creating drones ---------- */
 function pickWp(d) {
   for (let k = 0; k < 16; k++) {
@@ -393,6 +420,7 @@ function pickWp(d) {
   }
   return { x: d.hx, z: d.hz };
 }
+
 
 function createDrone(hx, hz, rMin, rMax, leash, temp) {
   const p = buildMesh();
@@ -419,10 +447,12 @@ function createDrone(hx, hz, rMin, rMax, leash, temp) {
   return d;
 }
 
+
 function spawnAll() {
   for (let i = 0; i < COUNT; i++) createDrone(TOWN.x, TOWN.z, PATROL_MIN, PATROL_MAX, LEASH, false);
   console.log('[drones] ' + COUNT + ' drones patrolling Port Town');
 }
+
 
 function respawn(d) {
   for (let k = 0; k < 12; k++) {
@@ -444,6 +474,7 @@ function respawn(d) {
   d.deadT = RESPAWN - 5;                                          // try again in 5 s
 }
 
+
 function spawnTestDrone() {
   if (!started || !C) return 'drones are not ready yet';
   if (drones.length >= MAX_TOTAL) return 'too many drones';
@@ -453,6 +484,7 @@ function spawnTestDrone() {
   createDrone(x, z, 8, 30, 80, true);
   return 'drone spawned 25 m ahead';
 }
+
 
 /* ---------- Targets ---------- */
 function buildTargets() {
@@ -469,11 +501,13 @@ function buildTargets() {
   } catch (e) { /* ignore */ }
 }
 
+
 function tpos(t, out) {
   const r = t.ref;
   out.x = r.x; out.z = r.z;
   out.y = t.kind === 'player' ? camPos.y - 0.5 : groundHeight(r.x, r.z) + 1.2;
 }
+
 
 function sense(d) {
   let t = d.target;
@@ -508,6 +542,7 @@ function sense(d) {
   }
 }
 
+
 /* ---------- Combat ---------- */
 function damageTarget(t, dmg, d) {
   if (t.kind === 'player') {
@@ -519,6 +554,7 @@ function damageTarget(t, dmg, d) {
     t.ref.hurt(dmg);
   }
 }
+
 
 function fire(d, t) {
   tpos(t, TP);
@@ -536,12 +572,14 @@ function fire(d, t) {
   if (hit) damageTarget(t, DMG[difficultyName()] || DMG.normal, d);
 }
 
+
 function killDrone(d) {
   d.dead = true; d.deadT = 0; d.target = null; d.burstLeft = 0;
   d.g.visible = false;
   boom(d.x, d.y, d.z);
   boomSound(d.x, d.y, d.z);
 }
+
 
 function hurtDrone(d, amount, from) {
   if (d.dead) return false;
@@ -557,6 +595,7 @@ function hurtDrone(d, amount, from) {
   }
   return false;
 }
+
 
 // soldiers and base guards shoot back
 function allyFire(d) {
@@ -576,6 +615,7 @@ function allyFire(d) {
   }
 }
 
+
 /* ---------- Your bullets ---------- */
 const _o = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3();
 const _u = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -588,6 +628,23 @@ function pelletDir(base, spread, out) {
   out.copy(base).addScaledVector(_u, Math.cos(a) * r).addScaledVector(_v, Math.sin(a) * r).normalize();
 }
 
+
+// hit radius: a little bigger the farther the drone is
+const hitRadius = (t) => Math.min(HIT_R_MAX, HIT_R + t * HIT_R_PER_M);
+
+
+// true if a wall, fence or tree stops the bullet before it reaches distance tEnd.
+// Only counts while the bullet is lower than WALL_H above the ground, so it flies over low cover.
+function bulletBlocked(ox, oy, oz, dx, dy, dz, tEnd) {
+  for (let t = 1.5; t < tEnd; t += 1) {
+    const x = ox + dx * t, y = oy + dy * t, z = oz + dz * t;
+    if (y > groundHeight(x, z) + WALL_H) continue;
+    if (blockedAt(x, z, 0.05)) return true;
+  }
+  return false;
+}
+
+
 function playerShot(kind) {
   const s = SHOTS[kind] || SHOTS.rifle;
   C.camera.getWorldPosition(_o);
@@ -596,24 +653,39 @@ function playerShot(kind) {
   for (let p = 0; p < s.pellets; p++) {
     if (s.pellets === 1) _d.copy(_b); else pelletDir(_b, s.spread, _d);
     let best = null, bestT = Infinity;
+    let near = null;                                               // closest pass, only for the debug message
     for (const d of drones) {
       if (d.dead || !d.g.visible) continue;
       const cx = d.x - _o.x, cy = d.y - _o.y, cz = d.z - _o.z;
       const t = cx * _d.x + cy * _d.y + cz * _d.z;
+      const d2 = Math.max(0, cx * cx + cy * cy + cz * cz - t * t);
+      if (DEBUG && t > 0 && (!near || d2 < near.d2)) near = { d2, t };
       if (t < 0.5 || t > s.range || t >= bestT) continue;
-      const d2 = cx * cx + cy * cy + cz * cz - t * t;
-      if (d2 <= HIT_R * HIT_R) { best = d; bestT = t; }
+      const r = hitRadius(t);
+      if (d2 <= r * r) { best = d; bestT = t; }
     }
-    if (!best) continue;
-    if (!lineClear(_o.x, _o.z, best.x, best.z)) continue;          // a wall or tree is in the way
+    if (!best) {
+      if (DEBUG && p === 0 && near && near.d2 < 30 * 30) {
+        const miss = Math.sqrt(near.d2);
+        if (near.t > s.range) console.log('[drones] shot (' + kind + ') missed: drone is ' + Math.round(near.t) + ' m away, ' + kind + ' reaches ' + s.range + ' m');
+        else console.log('[drones] shot (' + kind + ') missed by ' + miss.toFixed(1) + ' m at ' + Math.round(near.t) + ' m (hit radius ' + hitRadius(near.t).toFixed(1) + ' m)');
+      }
+      continue;
+    }
+    if (bulletBlocked(_o.x, _o.y, _o.z, _d.x, _d.y, _d.z, bestT - 1.5)) {   // a wall or tree is in the way
+      if (DEBUG && p === 0) console.log('[drones] shot (' + kind + ') blocked by a wall or tree at ' + Math.round(bestT) + ' m');
+      continue;
+    }
     const fall = s.pellets > 1 ? 1 - 0.5 * (bestT / s.range) : 1;
     dmgMap.set(best, (dmgMap.get(best) || 0) + s.dmg * fall);
   }
   if (!dmgMap.size) return;
   let killed = false;
   for (const [d, dmg] of dmgMap) if (hurtDrone(d, dmg, 'player')) killed = true;
+  if (DEBUG) console.log('[drones] HIT (' + kind + ')' + (killed ? ' · destroyed' : ''));
   try { extrasEvent('hit', { head: false }); if (killed) extrasEvent('kill', { head: false }); } catch (e) { /* ignore */ }
 }
+
 
 /* ---------- Flying ---------- */
 function move(d, dx, dz) {
@@ -624,6 +696,7 @@ function move(d, dx, dz) {
   return false;
 }
 
+
 function updateDrone(d, dt) {
   if (d.dead) {
     d.deadT += dt;
@@ -633,13 +706,17 @@ function updateDrone(d, dt) {
   d.phase += dt;
   if (d.flash > 0) { d.flash -= dt; if (d.flash <= 0) look(d); }
 
+
   d.senseT -= dt;
   if (d.senseT <= 0) { d.senseT = 0.3 + Math.random() * 0.1; sense(d); }
 
+
   d.g.visible = Math.hypot(d.x - camPos.x, d.z - camPos.z) < SHOW_DIST;
+
 
   let mx = 0, mz = 0, faceYaw = d.yaw;
   const t = d.target;
+
 
   if (d.state === 'fight' && t) {
     tpos(t, TP);
@@ -648,12 +725,14 @@ function updateDrone(d, dt) {
     const nx = dx / dist, nz = dz / dist;
     faceYaw = Math.atan2(-dx, -dz);
 
+
     d.strafeT -= dt;
     if (d.strafeT <= 0) { d.strafeDir *= -1; d.strafeT = 0.8 + Math.random() * 1.6; }
     if (!d.clear || dist > KEEP_MAX) { mx += nx * APPROACH; mz += nz * APPROACH; }
     else if (dist < KEEP_MIN)        { mx -= nx * BACKOFF;  mz -= nz * BACKOFF; }
     mx += -nz * d.strafeDir * STRAFE;
     mz +=  nx * d.strafeDir * STRAFE;
+
 
     d.reactT -= dt;
     if (d.pauseT > 0) d.pauseT -= dt;
@@ -675,6 +754,7 @@ function updateDrone(d, dt) {
     else { mx = dx / dist * PATROL_SPEED; mz = dz / dist * PATROL_SPEED; faceYaw = Math.atan2(-mx, -mz); }
   }
 
+
   // keep apart from other drones
   for (const o of drones) {
     if (o === d || o.dead) continue;
@@ -682,12 +762,14 @@ function updateDrone(d, dt) {
     if (od < 5 && od > 0.01) { mx += ox / od * 2; mz += oz / od * 2; }
   }
 
+
   const moved = move(d, mx * dt, mz * dt);
   if (!moved) {
     if (d.state === 'fight') d.strafeDir *= -1; else d.wp = pickWp(d);
   }
   d.vx += (mx - d.vx) * Math.min(1, dt * 4);
   d.vz += (mz - d.vz) * Math.min(1, dt * 4);
+
 
   // height: follows the ground, bobs gently
   const wantAlt = d.state === 'fight'
@@ -697,6 +779,7 @@ function updateDrone(d, dt) {
   const wantY = groundHeight(d.x, d.z) + Math.max(3, d.alt);
   d.y += (wantY - d.y) * Math.min(1, dt * 6);
 
+
   // turn and tilt
   d.yaw += angDiff(d.yaw, faceYaw) * Math.min(1, dt * 5);
   const fx0 = -Math.sin(d.yaw), fz0 = -Math.cos(d.yaw);
@@ -705,13 +788,16 @@ function updateDrone(d, dt) {
   d.tilt.rotation.x += (Math.max(-0.35, Math.min(0.35, -fwd * 0.04)) - d.tilt.rotation.x) * Math.min(1, dt * 5);
   d.tilt.rotation.z += (Math.max(-0.35, Math.min(0.35, side * 0.04)) - d.tilt.rotation.z) * Math.min(1, dt * 5);
 
+
   d.g.position.set(d.x, d.y, d.z);
   d.g.rotation.y = d.yaw;
+
 
   // allies shoot back
   d.allyT -= dt;
   if (d.allyT <= 0) { d.allyT = 0.6; if (d.g.visible) allyFire(d); }
 }
+
 
 /* ---------- extras.js hooks ---------- */
 export function init(ctx) {
@@ -726,7 +812,13 @@ export function init(ctx) {
       ' | fighting ' + alive.filter((d) => d.state === 'fight').length);
     return alive.map((d) => ({ x: Math.round(d.x), z: Math.round(d.z), hp: Math.round(d.hp), state: d.state }));
   };
+  window.droneDebug = (on) => {
+    DEBUG = on === undefined ? !DEBUG : !!on;
+    console.log('[drones] shot debug ' + (DEBUG ? 'ON: every shot near a drone prints why it hit or missed' : 'OFF'));
+  };
+  console.log('[drones] v2 ready: fairer hits (bullets fly over low cover, bigger hit sphere far away). Console: droneDebug(true)');
 }
+
 
 export function update(dt, ctx) {
   C = ctx;
@@ -737,15 +829,19 @@ export function update(dt, ctx) {
   dt = Math.min(dt, 0.1);
   ctx.camera.getWorldPosition(camPos);
 
+
   if (!ctx.isPlaying()) { setHum(0, 0); return; }          // paused: everything freezes
+
 
   ac();
   senseT -= dt;
   if (senseT <= 0) { senseT = 0.3; buildTargets(); }
 
+
   for (const d of drones) updateDrone(d, dt);
   updateBeams(dt);
   updateFx(dt);
+
 
   // rotor hum follows the nearest living drone
   let near = null, nd = Infinity;
@@ -760,12 +856,14 @@ export function update(dt, ctx) {
   } else setHum(0, 0);
 }
 
+
 export function onEvent(name, data, ctx) {
   C = ctx || C;
   if (!started || !C) return;
   if (name === 'shot') playerShot((data && data.kind) || 'rifle');
   else if (name === 'restart') reset(C);
 }
+
 
 export function reset(ctx) {
   for (let i = drones.length - 1; i >= 0; i--) {
@@ -785,6 +883,7 @@ export function reset(ctx) {
   clearFx();
   setHum(0, 0);
 }
+
 
 // for the minimap and other files
 export function getDrones() { return drones; }

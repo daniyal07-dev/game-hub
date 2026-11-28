@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>NOVA STRIKE 3D - Campaign</title>
 
-
-
-
   <script type="importmap">
     {
       "imports": {
@@ -17,9 +14,6 @@
     }
   </script>
 
-
-
-
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0f18; color: #fff;
@@ -27,9 +21,6 @@
     .hidden { display: none !important; }
     #game-container { position: fixed; inset: 0; }
     #game-container canvas { display: block; }
-
-
-
 
     /* small on-screen info */
     #hud { position: fixed; left: 12px; top: 10px; z-index: 5; pointer-events: none;
@@ -40,15 +31,9 @@
     #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
       border-radius: 50%; background: rgba(255,255,255,0.8); z-index: 5; pointer-events: none; }
 
-
-
-
     #loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
       justify-content: center; background: #0a0f18; font-weight: 700; letter-spacing: 2px;
       font-size: 18px; color: #7fe9ff; }
-
-
-
 
     .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
       justify-content: center; background: rgba(6,10,18,0.78); }
@@ -71,17 +56,11 @@
     .btn.ghost { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); }
     #touch-note { font-size: 13px; color: #ffd24a; margin: 8px 0; }
 
-
-
-
     /* phone instructions: hidden on PC, shown only on phones (see the media query below) */
     #phone-help { display: none; margin: 0 0 8px; font-size: 12px; text-align: left; line-height: 1.35; }
     #phone-help .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
     #phone-help b { color: #7fe9ff; }
     #phone-help .tip { margin-top: 6px; text-align: center; font-size: 11px; color: #ffd24a; }
-
-
-
 
     /* ---------- PHONE ONLY ---------- */
     @media (hover: none) and (pointer: coarse) {
@@ -103,13 +82,7 @@
 </head>
 <body>
 
-
-
-
   <div id="game-container"></div>
-
-
-
 
   <!-- Small info (FPS, position) -->
   <div id="hud" class="hidden">
@@ -119,13 +92,7 @@
   </div>
   <div id="crosshair" class="hidden"></div>
 
-
-
-
   <div id="loading">GENERATING ISLAND...</div>
-
-
-
 
   <!-- Start / pause screen -->
   <div id="start-screen" class="overlay hidden">
@@ -133,9 +100,6 @@
       <h1>NOVA STRIKE <span>CAMPAIGN</span></h1>
       <p class="subtitle">Strike Command Island</p>
       <div class="tag">STAGE 1 · PLAYABLE</div>
-
-
-
 
       <!-- PC controls. The keys in <b data-keys="..."> are filled in by the script at the bottom,
            so they always show the player's real (rebound) keys.
@@ -165,9 +129,6 @@
       </ul>
       <p class="keys-hint">Want different keys? Open ⚙ Settings → Controls.</p>
 
-
-
-
       <!-- PHONE controls (shown on phones only) -->
       <div id="phone-help">
         <div class="grid">
@@ -179,19 +140,13 @@
           <div><b>Tap the Barracks box</b> Train a soldier</div>
           <div><b>FOLLOW · HOLD · ATTACK</b> Appear after your first soldier</div>
           <div><b>Tap the minimap</b> Opens the full map</div>
-          <div><b>Truck</b> Stand next to it, tap USE. Stick drives · BRAKE · BOOST · VIEW · GET OUT</div>
+          <div><b>Truck</b> Stand next to it, tap USE. ◀ ▶ steer · GAS · REVERSE · BRAKE · BOOST · VIEW · GET OUT</div>
           <div><b>⚙</b> Settings (volume, aim assist, weather) · <b>❚❚</b> Pause</div>
         </div>
         <div class="tip">Tap anywhere to skip the intro. Hold your phone sideways (landscape) for the best view.</div>
       </div>
 
-
-
-
       <p id="touch-note" class="hidden">Touch controls need a phone or tablet. On this screen, use the keyboard and mouse.</p>
-
-
-
 
       <div>
         <button id="play-btn" class="btn" type="button">▶ ENTER ISLAND</button>
@@ -204,19 +159,10 @@
     </div>
   </div>
 
-
-
-
   <!-- PHONE ONLY: the first tap re-enters fullscreen + landscape (does nothing on PC) -->
   <script src="../js/phone-fs.js"></script>
 
-
-
-
   <script type="module" src="campaign/main.js"></script>
-
-
-
 
   <!-- PHONE ONLY: load the touch controls, then the phone extras (Settings button, Scope,
        truck buttons, Settings panel fit). On PC (or a laptop with a mouse) neither file is loaded.
@@ -231,9 +177,6 @@
         .catch((err) => console.warn('[phone-ui] could not load phone-ui.js', err));
     }
   </script>
-
-
-
 
   <!-- keeps the start-screen key list in sync with keybinds.js -->
   <script type="module">
@@ -255,9 +198,6 @@
     render();
     onChange(render);
   </script>
-
-
-
 
   <!-- NOVA assistant for the Campaign (press N). Separate from games/assistant.js -->
   <script type="module" src="campaign/nova.js"></script>

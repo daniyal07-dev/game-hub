@@ -1,5 +1,5 @@
 // ============================================================
-//  NOVA STRIKE 3D — Campaign: games/campaign/vehicles.js  (v3)
+//  NOVA STRIKE 3D — Campaign: games/campaign/vehicles.js  (v4)
 //  The ARMY TRUCK (built from code, no model file).
 //    E near the truck = get in / get out      V = first / third person
 //    W A S D (or arrows) drive, SPACE handbrake, SHIFT boost
@@ -9,10 +9,10 @@
 //    jump out behind the truck when you get out.
 //  * Walls, trees and deep water stop the truck (collision.js).
 //  * Driving over an enemy at speed kills it (roadkill counter).
-//  * Phones: joystick drives, JUMP = brake, VIEW / GET OUT buttons.
+//  * Phones: arrows / gas / brake pad (phone-ui.js), VIEW / GET OUT buttons.
 //  Does not touch main.js or player.js. Loaded by extras.js.
 //  Exports buildTruck() so the enemy truck can reuse the model.
-//  Console: vehicles()  vehicles({view:'tpp', fwd:22, here:true, require:false})
+//  Console: vehicles()  vehicles({view:'tpp', fwd:22, here:true, require:false, solid:true})
 //
 //  v2: sharp-turn fixes. Gloves ride on the steering wheel and the
 //      arms follow them, smaller wheel turn, limited turn rate (less
@@ -24,12 +24,17 @@
 //      riders cannot shoot or walk off, they get out facing the truck's
 //      direction, and the truck HUD / prompt / buttons are hidden while
 //      the game is paused.
+//  v4: SOLID TRUCK. The truck body is now a solid box for you and your
+//      soldiers (you cannot walk through it, you slide along it).
+//      Size knobs: BODY_HX, BODY_Z0, BODY_Z1, BODY_TOP. SOLID = false
+//      switches it off.
 // ============================================================
 import * as THREE from 'three';
 import { resolve, blockedAt, groundHeight, onPier } from './collision.js';
 import { heightAt, SPAWN, WORLD } from './terrain.js';
 import { hurtEnemy } from './enemies.js';
 import { matches, isDown } from './keybinds.js';
+
 
 
 
@@ -70,6 +75,15 @@ const VIEW_KEY = 'campaign_truckview';
 const PHONE = (typeof matchMedia === 'function' &&
                matchMedia('(hover: none) and (pointer: coarse)').matches);
 
+// solid body (walking player and soldiers cannot enter it)
+let SOLID = true;                 // false = walk through the truck again
+const BODY_HX = 1.25;             // half width of the truck body (m)
+const BODY_Z0 = -3.65;            // front end (local Z, the front points to -Z)
+const BODY_Z1 = 3.95;             // rear end
+const BODY_TOP = 2.8;             // above this height (m over the truck's ground) you could pass over it
+const SOLID_R = 0.45;             // body radius of a person
+
+
 
 
 
@@ -86,6 +100,8 @@ try { if (localStorage.getItem(VIEW_KEY) === 'tpp') view = 'tpp'; } catch (e) { 
 let ac = null, eng = null, master = 0.8, toastTimer = 0;
 const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3();
 const PP = { x: 0, z: 0 };
+const _o = { x: 0, z: 0, hit: false };
+
 
 
 
@@ -97,6 +113,7 @@ const walkOK = (x, z) => heightAt(x, z) > WATER_BLOCK || onPier(x, z);
 function isUse(code) {
   try { return matches('use', code) || code === 'KeyE'; } catch (e) { return code === 'KeyE'; }
 }
+
 
 
 
@@ -150,6 +167,60 @@ function holdRider(s) {
 
 
 
+
+// ============================================================
+//  SOLID BODY: push people out of the truck's box
+// ============================================================
+// Returns { x, z, hit }. (x, z) is the nearest point outside the body (radius r around it).
+// The result object is reused, read it straight away.
+function pushOutOfTruck(x, z, r) {
+  _o.hit = false; _o.x = x; _o.z = z;
+  if (!SOLID || !built) return _o;
+  const dx = x - T.x, dz = z - T.z;
+  if (dx * dx + dz * dz > 64) return _o;              // farther than 8 m: nothing to do
+  const ch = Math.cos(T.h), sh = Math.sin(T.h);
+  let lx = dx * ch - dz * sh;                         // position in the truck's own frame
+  let lz = dx * sh + dz * ch;
+  const cz = (BODY_Z0 + BODY_Z1) / 2;
+  const hx = BODY_HX + r, hz = (BODY_Z1 - BODY_Z0) / 2 + r;
+  const ox = hx - Math.abs(lx), oz = hz - Math.abs(lz - cz);
+  if (ox <= 0 || oz <= 0) return _o;                  // outside the box
+  if (ox < oz) lx = lx >= 0 ? hx : -hx;               // leave by the nearest side
+  else lz = cz + (lz - cz >= 0 ? hz : -hz);
+  _o.x = T.x + lx * ch + lz * sh;
+  _o.z = T.z - lx * sh + lz * ch;
+  _o.hit = true;
+  return _o;
+}
+// soldiers on foot (not riding) cannot stand inside the truck either
+function pushSoldiers() {
+  if (!SOLID || !built || !C || !C.getSoldiers) return;
+  for (const s of C.getSoldiers()) {
+    if (isDead(s) || cargo.includes(s)) continue;
+    const q = posOf(s);
+    if (!q) continue;
+    const o = pushOutOfTruck(q.x, q.z, SOLID_R);
+    if (!o.hit) continue;
+    const g = groupOf(s);
+    place(s, o.x, g && g.position ? g.position.y : (typeof s.y === 'number' ? s.y : 0), o.z);
+    if (s.char && s.char.setPose) s.char.setPose(o.x, o.z, typeof s.heading === 'number' ? s.heading : 0);
+  }
+}
+// the walking player slides along the truck
+function pushPlayer(p) {
+  if (!SOLID || p.dead) return;
+  if (p.y - 1.7 > T.y + BODY_TOP) return;             // above the roof
+  const o = pushOutOfTruck(p.x, p.z, SOLID_R);
+  if (!o.hit) return;
+  const cam = C.camera;
+  if (cam) { cam.position.x += o.x - p.x; cam.position.z += o.z - p.z; }   // the camera was already placed this frame
+  p.x = o.x; p.z = o.z;
+}
+
+
+
+
+
 // ============================================================
 //  THE TRUCK MODEL  (exported: the enemy truck uses it too)
 // ============================================================
@@ -169,6 +240,7 @@ function makeEmblem(color) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
 
 
 
@@ -195,6 +267,7 @@ export function buildTruck(o = {}) {
 
 
 
+
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
   const box = (w, h, d, mat, x, y, z, cast = true, parent = g) => {
@@ -204,6 +277,7 @@ export function buildTruck(o = {}) {
     parent.add(m);
     return m;
   };
+
 
 
 
@@ -226,6 +300,7 @@ export function buildTruck(o = {}) {
   }
   const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 8), mDark);
   ex.position.set(1.3, 1.9, -0.25); g.add(ex);
+
 
 
 
@@ -254,6 +329,7 @@ export function buildTruck(o = {}) {
 
 
 
+
   // star on both doors
   const emb = makeEmblem(o.emblem || '#e8efe0');
   for (const sx of [-1, 1]) {
@@ -263,6 +339,7 @@ export function buildTruck(o = {}) {
     pl.rotation.y = sx * Math.PI / 2;
     g.add(pl);
   }
+
 
 
 
@@ -278,6 +355,7 @@ export function buildTruck(o = {}) {
   cover.position.set(0, 1.82, 1.75);
   cover.castShadow = true;
   g.add(cover);
+
 
 
 
@@ -307,6 +385,7 @@ export function buildTruck(o = {}) {
 
 
 
+
   // steering wheel (tilted toward the driver) + the part that turns
   const tilt = new THREE.Group();
   tilt.position.set(-0.55, 1.62, -1.72);
@@ -322,6 +401,7 @@ export function buildTruck(o = {}) {
   box(0.03, 0.06, 0.03, std(0xe6e08a, 0.6, 0), 0, 0.2, 0, false, steer);   // top marker so you can see it turn
   const col = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 8), mDark);
   col.rotation.x = Math.PI / 2; col.position.z = -0.25; tilt.add(col);
+
 
 
 
@@ -361,8 +441,10 @@ export function buildTruck(o = {}) {
 
 
 
+
   return { group: g, spinners, fronts, steer, hands, setHands, poseArms };
 }
+
 
 
 
@@ -430,6 +512,7 @@ function build(ctx) {
 
 
 
+
 // ============================================================
 //  SCREEN PARTS
 // ============================================================
@@ -458,6 +541,7 @@ function ensureUi() {
 
 
 
+
   const tap = (el, fn) => {
     el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
     el.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
@@ -474,6 +558,7 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { ui.toast.style.display = 'none'; }, 1800);
 }
+
 
 
 
@@ -511,11 +596,13 @@ function engineTick(on, sf, thr) {
 
 
 
+
 // ============================================================
 //  GETTING IN / OUT
 // ============================================================
 function nearTruck(p) { return Math.hypot(p.x - T.x, p.z - T.z) < ENTER_R; }
 function unlocked() { return !REQUIRE_SOLDIER || (C.getSoldiers && C.getSoldiers().length > 0); }
+
 
 
 
@@ -566,6 +653,7 @@ function unloadSoldiers() {
 
 
 
+
 // gives the normal on-foot screen parts back after driving
 function restoreView() {
   const ch = document.getElementById('crosshair');
@@ -573,6 +661,7 @@ function restoreView() {
   const gr = (C && C.camera) ? C.camera.getObjectByName('scope-rig') : null;
   if (gr) gr.visible = true;
 }
+
 
 
 
@@ -591,6 +680,7 @@ function enter() {
   toast(PHONE ? 'Driving the army truck · ' + cargo.length + ' soldiers aboard'
               : 'ARMY TRUCK · ' + cargo.length + ' soldiers aboard · E to get out · V view');
 }
+
 
 
 
@@ -627,11 +717,13 @@ function leave(force, silent) {
 
 
 
+
 function toggleView() {
   view = view === 'fpp' ? 'tpp' : 'fpp';
   try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* ignore */ }
   toast(view === 'fpp' ? 'VIEW: DRIVER SEAT' : 'VIEW: BEHIND THE TRUCK');
 }
+
 
 
 
@@ -655,6 +747,7 @@ function drive(dt, p, cam, playing) {
 
 
 
+
     // speed
     const maxF = MAX_FWD * (boost ? BOOST : 1);
     let tgt = thr > 0 ? thr * maxF : thr < 0 ? thr * MAX_REV : 0, rate;
@@ -663,6 +756,7 @@ function drive(dt, p, cam, playing) {
     else if (tgt * T.speed < -0.1) rate = BRAKE;
     else rate = Math.abs(tgt) > Math.abs(T.speed) ? ACCEL : COAST * 1.5;
     T.speed += clamp(tgt - T.speed, -rate * dt, rate * dt);
+
 
 
 
@@ -681,6 +775,7 @@ function drive(dt, p, cam, playing) {
     T.h += dh;
     if (view === 'fpp') p.yaw += dh;                      // the cab view turns with the truck
     else if (Math.abs(T.speed) > 0.5) p.yaw += wrapA(T.h - p.yaw) * Math.min(1, dt * TPP_FOLLOW);   // chase camera swings behind
+
 
 
 
@@ -713,6 +808,7 @@ function drive(dt, p, cam, playing) {
 
 
 
+
     // roadkill
     if (Math.abs(T.speed) > ROADKILL_SPEED && C.getEnemies) {
       const now = performance.now();
@@ -733,6 +829,7 @@ function drive(dt, p, cam, playing) {
       }
     }
   }
+
 
 
 
@@ -758,9 +855,11 @@ function drive(dt, p, cam, playing) {
 
 
 
+
   // the player goes where the truck goes
   p.x = T.x; p.z = T.z; p.y = T.y + 2.0;
   p.vx = p.vz = p.vy = 0; p.grounded = true; p.fly = false;
+
 
 
 
@@ -777,7 +876,9 @@ function drive(dt, p, cam, playing) {
 
 
 
+
   placeCamera(dt, p, cam);
+
 
 
 
@@ -794,8 +895,10 @@ function drive(dt, p, cam, playing) {
 
 
 
+
   engineTick(playing, Math.min(1, Math.abs(T.speed) / MAX_FWD), thr);
 }
+
 
 
 
@@ -830,10 +933,13 @@ function placeCamera(dt, p, cam) {
 
 
 
+
 function onFoot(dt, p, playing) {
-  // a parked truck: keep it on the ground, nothing else
+  // a parked truck: keep it on the ground, and keep the walking player out of its body
   T.y += (groundHeight(T.x, T.z) - T.y) * Math.min(1, dt * 10);
+  if (playing) pushPlayer(p);
 }
+
 
 
 
@@ -851,11 +957,13 @@ function uiTick(dt, p, playing) {
 
 
 
+
   beacon.visible = !driving && playing && open && dist > 14;
   if (beacon.visible) {
     beacon.position.set(T.x, T.y + 20, T.z);
     beacon.material.opacity = 0.2 + 0.08 * Math.sin(performance.now() / 350);
   }
+
 
 
 
@@ -877,6 +985,7 @@ function uiTick(dt, p, playing) {
 
 
 
+
 // ============================================================
 //  INPUT
 // ============================================================
@@ -886,10 +995,12 @@ window.addEventListener('blur', () => { for (const k in down) down[k] = false; }
 
 
 
+
 // left mouse must not shoot while driving (capture phase: runs before player.js)
 document.addEventListener('mousedown', (e) => {
   if (driving && e.button === 0) e.stopImmediatePropagation();
 }, true);
+
 
 
 
@@ -907,14 +1018,16 @@ function wrapTouch() {
 
 
 
+
 // ============================================================
 //  EXTRAS INTERFACE
 // ============================================================
 export function init(ctx) {
   C = ctx;
   ensureUi();
-  console.log('[vehicles] v3 ready: army truck (E to drive, V view, up to ' + MAX_SOLDIERS + ' soldiers)');
+  console.log('[vehicles] v4 ready: army truck (E to drive, V view, up to ' + MAX_SOLDIERS + ' soldiers) · solid body ' + (SOLID ? 'ON' : 'OFF'));
 }
+
 
 
 
@@ -929,12 +1042,14 @@ export function update(dt, ctx) {
   if (driving && p.dead) leave(true);
   if (driving) drive(dt, p, cam, playing);
   else onFoot(dt, p, playing);
+  if (playing) pushSoldiers();
   applyIdle();
   uiTick(dt, p, playing);
 }
 function applyIdle() {
   if (!driving && M) { applyTransform(); rig.setHands(false); }
 }
+
 
 
 
@@ -952,10 +1067,12 @@ export function onKey(code, ctx) {
 
 
 
+
 export function onEvent(name, data, ctx) {
   C = ctx || C;
   if (name === 'died' && driving) leave(true);
 }
+
 
 
 
@@ -973,6 +1090,7 @@ export function reset(ctx) {
 
 
 
+
 // ============================================================
 //  DOORS AND CONSOLE
 // ============================================================
@@ -983,13 +1101,15 @@ window.campaignTruck = {
 
 
 
-// vehicles({view:'tpp'|'fpp', fwd:22, accel:10, require:false, kill:250, here:true})
+
+// vehicles({view:'tpp'|'fpp', fwd:22, accel:10, require:false, kill:250, here:true, solid:true})
 window.vehicles = function (o) {
   if (o && typeof o === 'object') {
     if (o.view === 'fpp' || o.view === 'tpp') { view = o.view; try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* ignore */ } }
     if (typeof o.fwd === 'number') MAX_FWD = Math.max(6, o.fwd);
     if (typeof o.accel === 'number') ACCEL = Math.max(1, o.accel);
     if ('require' in o) REQUIRE_SOLDIER = !!o.require;
+    if ('solid' in o) SOLID = !!o.solid;
     if (typeof o.kill === 'number') ROADKILL_DMG = o.kill;
     if (typeof o.kmh === 'number') ROADKILL_SPEED = o.kmh / 3.6;
     if (o.here && built && C && !driving) {            // put the truck 9 m in front of you (for testing)
@@ -999,6 +1119,7 @@ window.vehicles = function (o) {
     }
   }
   console.log('[vehicles] view ' + view + ' · top speed ' + MAX_FWD + ' m/s · accel ' + ACCEL +
-    ' · needs a soldier ' + REQUIRE_SOLDIER + ' · roadkill ' + ROADKILL_DMG + ' dmg above ' + Math.round(ROADKILL_SPEED * 3.6) + ' km/h' +
+    ' · needs a soldier ' + REQUIRE_SOLDIER + ' · solid body ' + SOLID +
+    ' · roadkill ' + ROADKILL_DMG + ' dmg above ' + Math.round(ROADKILL_SPEED * 3.6) + ' km/h' +
     ' · truck at X ' + Math.round(T.x) + ' Z ' + Math.round(T.z) + ' · roadkills ' + roadkills);
 };
